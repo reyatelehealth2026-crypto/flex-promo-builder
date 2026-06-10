@@ -5,7 +5,7 @@
 - [x] สร้าง golden fixtures จาก flex-builder.js จริง
 - [x] เก็บ gen-fixtures.mjs + fixtures.json เข้า repo ที่ test/golden/
 - [x] เพิ่ม `"type": "module"` ใน package.json (ลด warning + overhead ตอน parse)
-- [ ] Debounce search ที่ panel.js:254 (~150ms)
+- [x] Debounce search ที่ panel.js:254 (~150ms)
 - [ ] แยก state + pure functions ออกจาก panel.js เป็น sidepanel/state.js (ไม่แตะ DOM code)
 - [ ] เปลี่ยน store-set เป็น debounced write (ไม่เขียนไฟล์ทุก keystroke)
 

@@ -50,6 +50,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
 function empty(text) { const e = el('div', 'empty'); e.textContent = text; return e; }
+function debounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
 
 // ---- init -----------------------------------------------------------------
 init();
@@ -251,7 +252,8 @@ function applyProducts(list, sheetUrl, sheetName, extra = {}) {
 
 // ---- product controls -----------------------------------------------------
 function bindProductControls() {
-  $('#search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); page = 1; renderList(); });
+  // debounced: typing into a 6k-product list re-renders at most every 150ms
+  $('#search').addEventListener('input', debounce((e) => { search = e.target.value.trim().toLowerCase(); page = 1; renderList(); }, 150));
   $('#select-all').addEventListener('click', () => {
     pageProducts().forEach((p) => selectedCodes.add(p.code));
     renderList(); baseChanged();
