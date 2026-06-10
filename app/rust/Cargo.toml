@@ -1,0 +1,20 @@
+[package]
+name = "rust_lib_prom9"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# cdylib for Android/Linux/Windows, staticlib for iOS/macOS, rlib so the
+# crate can also be consumed by Rust integration tests.
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+prom9_core = { path = "../../prom9_core" }
+flutter_rust_bridge = "2"
+serde_json = "1"
+anyhow = "1"
+
+[lints.rust]
+# The #[frb] attribute macro expands `#[cfg(frb_expand)]` blocks; silence the
+# unexpected-cfg lint as recommended by the flutter_rust_bridge docs.
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(frb_expand)"] }
