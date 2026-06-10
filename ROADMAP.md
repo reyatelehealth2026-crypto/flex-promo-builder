@@ -7,7 +7,7 @@
 - [x] เพิ่ม `"type": "module"` ใน package.json (ลด warning + overhead ตอน parse)
 - [x] Debounce search ที่ panel.js:254 (~150ms)
 - [x] แยก state + pure functions ออกจาก panel.js เป็น sidepanel/state.js (ไม่แตะ DOM code)
-- [ ] เปลี่ยน store-set เป็น debounced write (ไม่เขียนไฟล์ทุก keystroke)
+- [x] เปลี่ยน store-set เป็น debounced write (ไม่เขียนไฟล์ทุก keystroke)
 
 ## Phase 2 — Rust Core (3–4 สัปดาห์)
 
