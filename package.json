@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "electron .",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "fixtures": "node test/golden/gen-fixtures.mjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win"
   },
