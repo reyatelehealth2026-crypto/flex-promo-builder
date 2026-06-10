@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promo / Content Studio — Re-ya</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="logo">🛍️</div>
+    <div class="head-text">
+      <h1>Promo / Content Studio</h1>
+      <span class="subtitle">เลือกสินค้า → ดีไซน์ Flex · สร้างภาพ · เขียนคอนเทนต์ → ส่งไป LINE</span>
+    </div>
+  </header>
+
+  <!-- Source (shared) -->
+  <section class="card">
+    <div class="tabs" id="source-tabs">
+      <button class="tab active" data-source="promo">โปรโมชัน</button>
+      <button class="tab" data-source="cny">แคตตาล็อก</button>
+      <button class="tab" data-source="sheet">Sheet</button>
+      <button class="tab" data-source="json">JSON</button>
+    </div>
+
+    <div class="source-pane" data-pane="promo">
+      <p class="hint">ดึงเฉพาะสินค้าที่มีโปรจริง (SPECIAL OFFER) จาก CNY — คำนวณราคาลด + เงื่อนไขยกแพ็คให้อัตโนมัติ</p>
+      <details>
+        <summary>ใช้ชุดโปรเต็ม (ต้องมี token)</summary>
+        <label>Bearer token (จาก cnypharmacy.com — ไม่บังคับ)</label>
+        <input type="text" id="promo-token" placeholder="ปล่อยว่าง = ใช้ชุดโปรสาธารณะ" />
+      </details>
+      <button class="btn-primary" id="load-promo">โหลดโปรโมชัน</button>
+    </div>
+
+    <div class="source-pane hidden" data-pane="cny">
+      <label>หมวด (theme)</label>
+      <select id="cny-theme">
+        <option value="all">ทั้งหมด</option>
+        <option value="promotion">โปรโมชั่น</option>
+        <option value="flash_sale">Flash Sale</option>
+        <option value="bestseller">ขายดี</option>
+        <option value="new_arrival">มาใหม่</option>
+      </select>
+      <p class="hint">ดึงแคตตาล็อกทั้งหมดจาก CNY (endpoint เดียวกับ /update-products)</p>
+      <button class="btn-primary" id="load-cny">โหลดแคตตาล็อก</button>
+    </div>
+
+    <div class="source-pane hidden" data-pane="sheet">
+      <label>ลิงก์ Google Sheet หรือ Spreadsheet ID</label>
+      <input type="text" id="sheet-url" placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+      <label>ชื่อชีต (ไม่บังคับ)</label>
+      <input type="text" id="sheet-name" placeholder="เช่น Sheet1" />
+      <p class="hint">ต้องแชร์เป็น public</p>
+      <button class="btn-primary" id="load-sheet">โหลดจาก Sheet</button>
+    </div>
+
+    <div class="source-pane hidden" data-pane="json">
+      <label>JSON URL</label>
+      <input type="text" id="json-url" placeholder="https://example.com/products.json" />
+      <button class="btn-primary" id="load-json-url">โหลดจาก URL</button>
+      <label>หรือเลือกไฟล์จากเครื่อง</label>
+      <input type="file" id="json-file" accept=".json,application/json" />
+      <p class="hint">รองรับ JSON ของ extension และ cny-products.json — อัปเซ็ต/สินค้าเพิ่มเองได้ที่นี่</p>
+    </div>
+
+    <p class="status" id="load-status"></p>
+  </section>
+
+  <!-- Products (shared across all tabs) -->
+  <section class="card" id="products-card">
+    <div class="search-row">
+      <input type="search" id="search" placeholder="ค้นหาสินค้าหรือรหัส SKU…" />
+    </div>
+    <div class="toolbar">
+      <span class="result-count" id="result-count">พบ 0 รายการ</span>
+      <span class="muted" id="selected-count">(0 เลือก)</span>
+      <span class="spacer"></span>
+      <button class="btn-ghost sm" id="select-all">เลือกหน้านี้</button>
+      <button class="btn-ghost sm" id="clear-all">ล้าง</button>
+      <select id="bulk-preset" class="sm" title="ตั้ง preset ให้ที่เลือก">
+        <option value="">preset…</option>
+        <option value="flash">⚡ Flash</option>
+        <option value="lastlot">🔥 ล็อตท้าย</option>
+        <option value="member">💎 สมาชิก</option>
+        <option value="custom">กำหนดเอง</option>
+      </select>
+      <span class="view-toggle">
+        <button class="vbtn active" id="view-grid" title="Grid">▦</button>
+        <button class="vbtn" id="view-list" title="List">☰</button>
+      </span>
+    </div>
+    <div id="product-list" class="product-list grid"></div>
+  </section>
+
+  <!-- Main tabs -->
+  <div class="maintabs" id="main-tabs">
+    <button class="maintab active" data-mainpane="flex">🎨 ดีไซน์ Flex</button>
+    <button class="maintab" data-mainpane="image">🖼️ สร้างภาพ</button>
+    <button class="maintab" data-mainpane="content">✍️ คอนเทนต์</button>
+  </div>
+
+  <!-- ===== Flex design pane ===== -->
+  <div class="mainpane" data-mainpane="flex">
+    <section class="card">
+      <h2>พรีวิว Flex</h2>
+      <div id="validation" class="validation"></div>
+      <div id="preview" class="preview"></div>
+    </section>
+
+    <section class="card">
+      <h2>💬 แชทกับ AI (crm-marketer) — แก้ดีไซน์สด</h2>
+      <details open>
+        <summary>ตั้งค่า AI</summary>
+        <label>วิธีเรียก AI</label>
+        <select id="ai-backend">
+          <option value="bridge">Claude Code (ฟรี — ใช้ login เดิม)</option>
+          <option value="api">Anthropic API key (จ่ายตามใช้)</option>
+        </select>
+        <div id="bridge-row">
+          <label>Bridge URL</label>
+          <input type="text" id="bridge-url" value="http://127.0.0.1:8765" />
+          <p class="hint">desktop: ฝัง bridge ในแอปแล้ว · extension: รัน <code>node bridge/server.cjs</code> ค้างไว้</p>
+        </div>
+        <div id="apikey-row" class="hidden">
+          <label>Anthropic API key</label>
+          <input type="password" id="api-key" placeholder="sk-ant-api03-..." />
+          <p class="hint">ต้องมี billing · model claude-opus-4-8</p>
+        </div>
+        <div class="row">
+          <button class="btn-ghost sm" id="save-key">บันทึก</button>
+          <button class="btn-ghost sm" id="test-conn">ทดสอบ</button>
+        </div>
+      </details>
+      <div class="row">
+        <label class="bulk">โหมด:</label>
+        <span class="view-toggle">
+          <button class="vbtn active" id="mode-advise" title="แนะนำก่อนแล้วค่อยอนุมัติ">แนะนำก่อน</button>
+          <button class="vbtn" id="mode-apply" title="แก้ทันที">แก้เลย</button>
+        </span>
+      </div>
+      <div id="chat-log" class="chat-log"></div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" rows="3" placeholder="เช่น ทำให้ราคาเด่นขึ้น + เพิ่มความเร่งด่วน, เปลี่ยนพื้นหลังเป็นไล่สี … (Enter = ส่ง · Shift+Enter = บรรทัดใหม่)"></textarea>
+        <button class="btn-primary" id="chat-send">ส่ง</button>
+      </div>
+      <div class="row">
+        <button class="btn-ghost sm" id="chat-reset">↺ กลับไปดีไซน์อัตโนมัติ</button>
+      </div>
+      <p class="status" id="chat-status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Export</h2>
+      <div class="row">
+        <input type="text" id="alt-text" placeholder="altText สำหรับ LINE" value="โปรโมชั่นสินค้า" />
+      </div>
+      <div class="row">
+        <button class="btn-primary" id="copy-json">คัดลอก JSON</button>
+        <button class="btn-ghost" id="download-json">ดาวน์โหลด .json</button>
+        <button class="btn-ghost" id="open-sim">เปิดใน LINE Simulator</button>
+      </div>
+      <p class="status" id="export-status"></p>
+      <textarea id="json-output" readonly spellcheck="false"></textarea>
+    </section>
+  </div>
+
+  <!-- ===== Image pane ===== -->
+  <div class="mainpane hidden" data-mainpane="image">
+    <section class="card">
+      <h2>🖼️ สร้างภาพ</h2>
+      <details>
+        <summary>☁️ ตั้งค่าโฮสต์รูป (เพื่อให้รูปส่ง LINE จริงได้)</summary>
+        <label>ผู้ให้บริการโฮสต์</label>
+        <select id="host-provider">
+          <option value="imgbb">imgbb (ฟรี — ใช้ API key เดียว)</option>
+          <option value="cloudinary">Cloudinary (unsigned preset)</option>
+        </select>
+        <div id="imgbb-row">
+          <label>imgbb API key</label>
+          <input type="password" id="imgbb-key" placeholder="ขอฟรีที่ api.imgbb.com" />
+        </div>
+        <div id="cld-row" class="hidden">
+          <label>Cloudinary cloud name</label>
+          <input type="text" id="cld-cloud" placeholder="เช่น mycloud" />
+          <label>Unsigned upload preset</label>
+          <input type="text" id="cld-preset" placeholder="ชื่อ preset แบบ unsigned" />
+        </div>
+        <button class="btn-ghost sm" id="save-host">บันทึกค่าโฮสต์</button>
+        <p class="hint">หลังสร้างรูปเสร็จ กด “☁️ อัปโหลด→URL” ใต้รูป → ได้ลิงก์ HTTPS เอาไปใส่ Flex ส่ง LINE ได้</p>
+      </details>
+      <div class="tabs" id="image-mode-tabs">
+        <button class="tab active" data-imgmode="composite">โปรแบนเนอร์ (ฟรี)</button>
+        <button class="tab" data-imgmode="ai">AI generate</button>
+      </div>
+
+      <div class="img-pane" data-imgpane="composite">
+        <p class="hint">เอารูปสินค้าที่เลือก + ราคา/badge/แบรนด์ → แบนเนอร์โปร (ฟรี ไม่ต้อง key/เน็ตของ AI)</p>
+        <div class="row">
+          <label>ขนาด</label>
+          <select id="img-size">
+            <option value="square">1080×1080 (จัตุรัส)</option>
+            <option value="portrait">1080×1350 (แนวตั้ง)</option>
+            <option value="story">1080×1920 (Story/Reels)</option>
+            <option value="line">1040×1040 (LINE)</option>
+          </select>
+          <label>เทมเพลต</label>
+          <select id="img-template">
+            <option value="promo">⭐ SPECIAL PROMO (การ์ดร้าน CNY)</option>
+            <option value="classic">Classic</option>
+            <option value="bold">Bold</option>
+            <option value="cny">🧧 ตรุษจีน (แดง-ทอง)</option>
+          </select>
+        </div>
+        <details>
+          <summary>ตั้งค่าการ์ด SPECIAL PROMO (โลโก้ / ข้อความแถบล่าง)</summary>
+          <label>โลโก้ร้าน (มุมขวาบน — ไม่บังคับ)</label>
+          <input type="file" id="promo-logo" accept="image/*" />
+          <label>ข้อความแถบล่าง</label>
+          <input type="text" id="promo-contact" placeholder="สั่งซื้อ/สอบถาม • LINE @cnypharmacy" />
+          <label class="ckline"><input type="checkbox" id="promo-shipfree" checked> แสดงป้าย “ส่งฟรี”</label>
+        </details>
+        <button class="btn-primary" id="gen-composite">สร้างแบนเนอร์จากสินค้าที่เลือก</button>
+        <p class="status" id="composite-status"></p>
+        <div id="composite-out" class="banner-out"></div>
+      </div>
+
+      <div class="img-pane hidden" data-imgpane="ai">
+        <div class="row">
+          <label>ผู้ให้บริการ</label>
+          <select id="img-provider">
+            <option value="codex">Codex (ฟรี — ใช้ login เดิม ไม่ต้องมี key)</option>
+            <option value="openai">OpenAI gpt-image-1 (จ่ายตามรูป)</option>
+            <option value="gemini">Gemini (free tier)</option>
+          </select>
+        </div>
+        <div id="img-key-row">
+          <label>API key (เก็บในเครื่อง)</label>
+          <input type="password" id="img-key" placeholder="sk-... (OpenAI) หรือ Gemini key" />
+          <button class="btn-ghost sm" id="save-img-key">บันทึก key</button>
+        </div>
+        <label>เทมเพลตพรอมพ์สำเร็จรูป</label>
+        <select id="img-prompt-preset">
+          <option value="">— เลือกเทมเพลต (เติมชื่อสินค้าที่เลือกให้อัตโนมัติ) —</option>
+          <option value="studio">โฆษณาร้านยา — สตูดิโอพื้นขาว สะอาด</option>
+          <option value="wood">วางบนโต๊ะไม้ แสงธรรมชาติ อบอุ่น</option>
+          <option value="cny">โปรตรุษจีน (CNY) — แดง-ทอง ลายมงคล</option>
+          <option value="flatlay">Flat-lay มินิมอล มุมบนลงล่าง</option>
+          <option value="gift">เซ็ตของขวัญสุขภาพ กล่องพรีเมียม</option>
+          <option value="lifestyle">ไลฟ์สไตล์ มีคนใช้จริง น่าเชื่อถือ</option>
+        </select>
+        <label>รูปอ้างอิง / เรฟ (image-to-image)</label>
+        <div class="ref-row">
+          <button class="btn-ghost sm" id="ref-pick">📎 เลือกไฟล์</button>
+          <button class="btn-ghost sm" id="ref-from-product">ใช้รูปสินค้าที่เลือก</button>
+          <button class="btn-ghost sm hidden" id="ref-clear">✕ ลบเรฟ</button>
+          <input type="file" id="ref-file" accept="image/*" class="hidden" />
+          <img id="ref-thumb" class="ref-thumb hidden" alt="" />
+        </div>
+        <p class="hint" id="ref-hint">แนบรูปให้ AI วาดต่อ — รองรับเต็มกับ <b>Gemini</b> · Codex = ทดลอง · OpenAI ยังไม่รองรับ</p>
+        <label>คำอธิบายรูป (prompt)</label>
+        <textarea id="img-prompt" rows="3" placeholder="เช่น ภาพถ่ายขวดวิตามินซีบนโต๊ะไม้ แสงธรรมชาติ สไตล์โฆษณาร้านยา สะอาด น่าเชื่อถือ"></textarea>
+        <div class="row">
+          <label>ขนาด</label>
+          <select id="img-ai-size">
+            <option value="1024x1024">1024×1024</option>
+            <option value="1024x1536">1024×1536 (แนวตั้ง)</option>
+            <option value="1536x1024">1536×1024 (แนวนอน)</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn-primary" id="gen-ai-image">สร้างรูป AI</button>
+          <button class="btn-ghost" id="cutout-bg" title="ตัดพื้นหลังสินค้าที่เลือกออก (ใช้ Gemini)">✂️ ลบพื้นหลังสินค้า</button>
+        </div>
+        <p class="status" id="ai-image-status"></p>
+        <div id="ai-image-out" class="banner-out"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== Content pane ===== -->
+  <div class="mainpane hidden" data-mainpane="content">
+    <section class="card">
+      <h2>✍️ คอนเทนต์ / ข้อความขาย</h2>
+      <p class="hint">ใช้สินค้าที่เลือก + crm-marketer เขียน copy (ผ่าน backend เดียวกับแชท · ห้ามอ้างสรรพคุณยา)</p>
+      <div class="row">
+        <label class="ckline"><input type="checkbox" id="ct-alt" checked> altText</label>
+        <label class="ckline"><input type="checkbox" id="ct-closing" checked> ปิดการขาย</label>
+        <label class="ckline"><input type="checkbox" id="ct-caption" checked> แคปชัน</label>
+        <label class="ckline"><input type="checkbox" id="ct-headline" checked> พาดหัว</label>
+      </div>
+      <div class="row">
+        <label>โทน</label>
+        <select id="ct-tone"><option value="warm">อบอุ่น</option><option value="urgent">เร่งด่วน</option><option value="formal">ทางการ</option></select>
+        <label>กลุ่ม</label>
+        <select id="ct-audience"><option value="general">ทั่วไป</option><option value="member">สมาชิก</option><option value="senior">ผู้สูงอายุ</option></select>
+        <label>ความยาว</label>
+        <select id="ct-length"><option value="short">สั้น</option><option value="medium">กลาง</option><option value="long">ยาว</option></select>
+      </div>
+      <button class="btn-primary" id="gen-content">สร้างคอนเทนต์</button>
+      <p class="status" id="content-status"></p>
+      <div id="content-out"></div>
+    </section>
+  </div>
+
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

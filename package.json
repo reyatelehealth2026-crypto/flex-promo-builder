@@ -1,0 +1,39 @@
+{
+  "name": "flex-promo-builder",
+  "version": "1.0.0",
+  "description": "Flex Promo Builder — desktop app (Electron). Build LINE Flex promo carousels from CNY data, edit design via Claude Code, export JSON.",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.reya.flexpromobuilder",
+    "productName": "Flex Promo Builder",
+    "asar": false,
+    "directories": { "output": "dist-app" },
+    "files": [
+      "desktop/**/*",
+      "sidepanel/**/*",
+      "lib/**/*",
+      "bridge/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Flex Promo Builder"
+    }
+  }
+}

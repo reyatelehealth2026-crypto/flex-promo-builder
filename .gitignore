@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output / packaged app
+dist-app/
+*.exe
+*.blockmap
+
+# Archives
+*.rar
+*.zip
+
+# OMC state / local tooling
+.omc/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+.env.*
