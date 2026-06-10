@@ -15,7 +15,16 @@
     </div>
   </header>
 
-  <!-- Source (shared) -->
+  <!-- Main tabs (page-level: each pane is its own page so sections don't stack) -->
+  <div class="maintabs" id="main-tabs">
+    <button class="maintab active" data-mainpane="products">🛒 สินค้า <span id="tab-selected" class="tab-pill hidden">0</span></button>
+    <button class="maintab" data-mainpane="flex">🎨 ดีไซน์ Flex</button>
+    <button class="maintab" data-mainpane="image">🖼️ แบนเนอร์ / รูป</button>
+    <button class="maintab" data-mainpane="content">✍️ คอนเทนต์</button>
+  </div>
+
+  <!-- ===== Products pane (source + list) ===== -->
+  <div class="mainpane" data-mainpane="products">
   <section class="card">
     <div class="tabs" id="source-tabs">
       <button class="tab active" data-source="promo">โปรโมชัน</button>
@@ -39,9 +48,6 @@
       <select id="cny-theme">
         <option value="all">ทั้งหมด</option>
         <option value="promotion">โปรโมชั่น</option>
-        <option value="flash_sale">Flash Sale</option>
-        <option value="bestseller">ขายดี</option>
-        <option value="new_arrival">มาใหม่</option>
       </select>
       <p class="hint">ดึงแคตตาล็อกทั้งหมดจาก CNY (endpoint เดียวกับ /update-products)</p>
       <button class="btn-primary" id="load-cny">โหลดแคตตาล็อก</button>
@@ -73,12 +79,22 @@
     <div class="search-row">
       <input type="search" id="search" placeholder="ค้นหาสินค้าหรือรหัส SKU…" />
     </div>
+    <div class="filter-chips" id="filter-chips">
+      <button class="fchip active" data-pfilter="all">ทั้งหมด</button>
+      <button class="fchip" data-pfilter="discount">🔻 มีโปรลด</button>
+      <button class="fchip" data-pfilter="giveaway">🎁 ของแถม</button>
+    </div>
     <div class="toolbar">
       <span class="result-count" id="result-count">พบ 0 รายการ</span>
       <span class="muted" id="selected-count">(0 เลือก)</span>
       <span class="spacer"></span>
       <button class="btn-ghost sm" id="select-all">เลือกหน้านี้</button>
       <button class="btn-ghost sm" id="clear-all">ล้าง</button>
+      <select id="sort-by" class="sm" title="เรียงลำดับ">
+        <option value="">เรียง…</option>
+        <option value="discount">🔻 ลดเยอะสุด</option>
+        <option value="expiry">⏰ ใกล้หมดอายุ</option>
+      </select>
       <select id="bulk-preset" class="sm" title="ตั้ง preset ให้ที่เลือก">
         <option value="">preset…</option>
         <option value="flash">⚡ Flash</option>
@@ -86,31 +102,47 @@
         <option value="member">💎 สมาชิก</option>
         <option value="custom">กำหนดเอง</option>
       </select>
+      <button class="btn-ghost sm" id="preset-manage" title="เพิ่ม/แก้ preset เอง">⚙️</button>
       <span class="view-toggle">
         <button class="vbtn active" id="view-grid" title="Grid">▦</button>
         <button class="vbtn" id="view-list" title="List">☰</button>
       </span>
     </div>
+    <div id="preset-editor" class="preset-editor hidden">
+      <b>Preset กำหนดเอง</b> — ตั้งชื่อ + ข้อความ badge + สี แล้วใช้ได้กับทุกสินค้า
+      <div id="preset-custom-list"></div>
+      <div class="row">
+        <input type="text" id="np-label" placeholder="ชื่อ preset เช่น 9.9 Mega Sale" />
+        <input type="text" id="np-badge" placeholder="ข้อความ badge เช่น 🔥 9.9 SALE" />
+        <input type="color" id="np-color" value="#E8000D" title="สี badge" />
+        <button class="btn-ghost sm" id="np-add">เพิ่ม</button>
+      </div>
+    </div>
     <div id="product-list" class="product-list grid"></div>
+    <div id="product-pager" class="pager"></div>
   </section>
-
-  <!-- Main tabs -->
-  <div class="maintabs" id="main-tabs">
-    <button class="maintab active" data-mainpane="flex">🎨 ดีไซน์ Flex</button>
-    <button class="maintab" data-mainpane="image">🖼️ สร้างภาพ</button>
-    <button class="maintab" data-mainpane="content">✍️ คอนเทนต์</button>
   </div>
 
   <!-- ===== Flex design pane ===== -->
-  <div class="mainpane" data-mainpane="flex">
+  <div class="mainpane hidden" data-mainpane="flex">
     <section class="card">
       <h2>พรีวิว Flex</h2>
+      <div class="row"><label>เทมเพลตการ์ด:</label><select id="flex-template">
+        <option value="classic">Classic (เดิม)</option>
+        <option value="promo">⭐ SPECIAL PROMO</option>
+        <option value="bigprice">💰 ราคาเด่น</option>
+        <option value="minimal">⬜ มินิมอลสะอาด</option>
+        <option value="urgent">⏰ เร่งด่วน</option>
+      </select></div>
       <div id="validation" class="validation"></div>
       <div id="preview" class="preview"></div>
     </section>
 
     <section class="card">
       <h2>💬 แชทกับ AI (crm-marketer) — แก้ดีไซน์สด</h2>
+      <div class="row">
+        <button class="btn-primary" id="open-chat-window">🪟 เปิดแชทหน้าต่างแยก (แนะนำ — หน้าหลักไม่ค้าง)</button>
+      </div>
       <details open>
         <summary>ตั้งค่า AI</summary>
         <label>วิธีเรียก AI</label>
@@ -193,6 +225,7 @@
       <div class="tabs" id="image-mode-tabs">
         <button class="tab active" data-imgmode="composite">โปรแบนเนอร์ (ฟรี)</button>
         <button class="tab" data-imgmode="ai">AI generate</button>
+        <button class="tab" data-imgmode="gwp">🎁 โปรพาร์ทเนอร์ (GWP)</button>
       </div>
 
       <div class="img-pane" data-imgpane="composite">
@@ -207,10 +240,10 @@
           </select>
           <label>เทมเพลต</label>
           <select id="img-template">
-            <option value="promo">⭐ SPECIAL PROMO (การ์ดร้าน CNY)</option>
-            <option value="classic">Classic</option>
-            <option value="bold">Bold</option>
-            <option value="cny">🧧 ตรุษจีน (แดง-ทอง)</option>
+            <option value="promo">⭐ SPECIAL PROMO (การ์ดร้าน CNY จริง • 1080²)</option>
+            <option value="cny">🧧 ตรุษจีน โปสเตอร์ (แดง-ทอง • 1080²)</option>
+            <option value="classic">Classic (canvas)</option>
+            <option value="bold">Bold (canvas)</option>
           </select>
         </div>
         <details>
@@ -221,7 +254,11 @@
           <input type="text" id="promo-contact" placeholder="สั่งซื้อ/สอบถาม • LINE @cnypharmacy" />
           <label class="ckline"><input type="checkbox" id="promo-shipfree" checked> แสดงป้าย “ส่งฟรี”</label>
         </details>
-        <button class="btn-primary" id="gen-composite">สร้างแบนเนอร์จากสินค้าที่เลือก</button>
+        <label class="ckline"><input type="checkbox" id="cutout-auto" checked> ✂️ ตัดพื้นหลังขาวของรูปสินค้าอัตโนมัติ (ฟรี — ให้สินค้ากลืนกับการ์ด)</label>
+        <div class="row">
+          <button class="btn-primary" id="gen-composite">สร้างแบนเนอร์จากสินค้าที่เลือก</button>
+          <button class="btn-ghost sm" id="clear-composite-out">🗑️ ล้างผลลัพธ์</button>
+        </div>
         <p class="status" id="composite-status"></p>
         <div id="composite-out" class="banner-out"></div>
       </div>
@@ -240,27 +277,27 @@
           <input type="password" id="img-key" placeholder="sk-... (OpenAI) หรือ Gemini key" />
           <button class="btn-ghost sm" id="save-img-key">บันทึก key</button>
         </div>
-        <label>เทมเพลตพรอมพ์สำเร็จรูป</label>
-        <select id="img-prompt-preset">
-          <option value="">— เลือกเทมเพลต (เติมชื่อสินค้าที่เลือกให้อัตโนมัติ) —</option>
-          <option value="studio">โฆษณาร้านยา — สตูดิโอพื้นขาว สะอาด</option>
-          <option value="wood">วางบนโต๊ะไม้ แสงธรรมชาติ อบอุ่น</option>
-          <option value="cny">โปรตรุษจีน (CNY) — แดง-ทอง ลายมงคล</option>
-          <option value="flatlay">Flat-lay มินิมอล มุมบนลงล่าง</option>
-          <option value="gift">เซ็ตของขวัญสุขภาพ กล่องพรีเมียม</option>
-          <option value="lifestyle">ไลฟ์สไตล์ มีคนใช้จริง น่าเชื่อถือ</option>
-        </select>
-        <label>รูปอ้างอิง / เรฟ (image-to-image)</label>
-        <div class="ref-row">
-          <button class="btn-ghost sm" id="ref-pick">📎 เลือกไฟล์</button>
-          <button class="btn-ghost sm" id="ref-from-product">ใช้รูปสินค้าที่เลือก</button>
-          <button class="btn-ghost sm hidden" id="ref-clear">✕ ลบเรฟ</button>
-          <input type="file" id="ref-file" accept="image/*" class="hidden" />
-          <img id="ref-thumb" class="ref-thumb hidden" alt="" />
+        <div class="tabs" id="genmode-tabs">
+          <button class="tab active" data-genmode="product">🧴 รูปสินค้า (จากเรฟ)</button>
+          <button class="tab" data-genmode="bg">🏞️ พื้นหลัง / ฉากแบนเนอร์</button>
         </div>
-        <p class="hint" id="ref-hint">แนบรูปให้ AI วาดต่อ — รองรับเต็มกับ <b>Gemini</b> · Codex = ทดลอง · OpenAI ยังไม่รองรับ</p>
-        <label>คำอธิบายรูป (prompt)</label>
-        <textarea id="img-prompt" rows="3" placeholder="เช่น ภาพถ่ายขวดวิตามินซีบนโต๊ะไม้ แสงธรรมชาติ สไตล์โฆษณาร้านยา สะอาด น่าเชื่อถือ"></textarea>
+        <div id="genmode-product-only">
+          <label>รูปอ้างอิง / เรฟ (image-to-image)</label>
+          <div class="ref-row">
+            <button class="btn-ghost sm" id="ref-pick">📎 เลือกไฟล์</button>
+            <button class="btn-ghost sm" id="ref-from-product">ใช้รูปสินค้าที่เลือก</button>
+            <button class="btn-ghost sm hidden" id="ref-clear">✕ ลบเรฟ</button>
+            <input type="file" id="ref-file" accept="image/*" class="hidden" />
+            <img id="ref-thumb" class="ref-thumb hidden" alt="" />
+          </div>
+          <p class="hint" id="ref-hint">แนบรูปให้ AI วาดต่อ — รองรับเต็มกับ <b>Gemini</b> · Codex = ทดลอง · OpenAI ยังไม่รองรับ</p>
+        </div>
+        <label>ตัวช่วยออกแบบพรอมพ์ (เลือกแล้วประกอบให้อัตโนมัติ)</label>
+        <div id="promptkit"></div>
+        <label>เพิ่มเติม (ไม่บังคับ)</label>
+        <input type="text" id="img-extra" placeholder="รายละเอียดเสริม เช่น มีแก้วน้ำข้างๆ, โทนหรูหรา" />
+        <label>คำอธิบายรูป (prompt) — แก้เองได้</label>
+        <textarea id="img-prompt" rows="3" placeholder="เลือกตัวช่วยด้านบน หรือพิมพ์เอง"></textarea>
         <div class="row">
           <label>ขนาด</label>
           <select id="img-ai-size">
@@ -272,10 +309,50 @@
         <div class="row">
           <button class="btn-primary" id="gen-ai-image">สร้างรูป AI</button>
           <button class="btn-ghost" id="cutout-bg" title="ตัดพื้นหลังสินค้าที่เลือกออก (ใช้ Gemini)">✂️ ลบพื้นหลังสินค้า</button>
+          <button class="btn-ghost sm" id="clear-ai-out">🗑️ ล้างผลลัพธ์</button>
         </div>
         <p class="status" id="ai-image-status"></p>
         <div id="ai-image-out" class="banner-out"></div>
       </div>
+
+      <div class="img-pane hidden" data-imgpane="gwp">
+        <p class="hint">การ์ด "ซื้อครบ X แถม Y" สำหรับโปรพาร์ทเนอร์/ซัพพลายเออร์ (เช่น DKSH/BAYER) — ข้อมูลพวกนี้ไม่มีใน API กรอกเองตามดีลจริง · ถ้าเลือกสินค้าที่มีโปรของแถม (🎁) อยู่ กดปุ่มดึงข้อมูลได้เลย</p>
+        <button class="btn-ghost sm" id="gwp-prefill">⤵️ ดึงจากโปรของแถมที่เลือก</button>
+        <label>ชื่อแคมเปญ *</label>
+        <input type="text" id="gwp-title" placeholder="เช่น โปรพิเศษเครือ DKSH" />
+        <label>แบรนด์ในเครือ (ไม่บังคับ)</label>
+        <input type="text" id="gwp-brands" placeholder="เช่น BAYER · Redoxon · Berocca" />
+        <label>เงื่อนไขซื้อ *</label>
+        <input type="text" id="gwp-buy" placeholder="เช่น ซื้อครบ ฿1,500" />
+        <label>ของแถม *</label>
+        <input type="text" id="gwp-gift" placeholder="เช่น Gift Card ฿100 / ฟิชออย 1 กล่อง" />
+        <div class="row">
+          <label>รหัสของแถม</label>
+          <input type="text" id="gwp-sku" placeholder="เช่น 6645" />
+          <label>จำนวน</label>
+          <input type="text" id="gwp-qty" placeholder="เช่น จำกัด 100 สิทธิ์" />
+        </div>
+        <label>ช่วงเวลา</label>
+        <input type="text" id="gwp-period" placeholder="เช่น วันนี้ – 30 มิ.ย. 2569 หรือจนกว่าของจะหมด" />
+        <label>รูปของแถม (ไม่บังคับ)</label>
+        <div class="row">
+          <input type="file" id="gwp-photo" accept="image/*" />
+          <button class="btn-ghost sm" id="gwp-photo-from-product">ใช้รูปสินค้าที่เลือก</button>
+        </div>
+        <div class="row">
+          <button class="btn-primary" id="gen-gwp">สร้างการ์ด GWP</button>
+          <button class="btn-ghost sm" id="clear-gwp-out">🗑️ ล้างผลลัพธ์</button>
+        </div>
+        <p class="status" id="gwp-status"></p>
+        <div id="gwp-out" class="banner-out"></div>
+      </div>
+
+      <!-- Template D: image-grid Flex from uploaded artwork (all modes share this) -->
+      <div class="row flexd-row">
+        <span class="muted" id="flexd-count">อัปโหลดรูป (☁️) แล้วเอามาจัดเป็น Flex ได้ที่นี่</span>
+        <button class="btn-ghost" id="make-flex-d" disabled>📐 ทำ Flex จากรูปที่อัปโหลด (Template D)</button>
+      </div>
+      <p class="status" id="flexd-status"></p>
     </section>
   </div>
 

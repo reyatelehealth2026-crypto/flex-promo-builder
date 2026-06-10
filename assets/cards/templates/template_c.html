@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!--
+  Template C — โปรพาร์ทเนอร์ / GWP "ซื้อครบ X แถม Y" 1080x1080
+  ข้อมูลจากฟอร์ม (supplier-threshold ไม่มีใน API) | ราคา/รหัส = HTML/CSS เสมอ
+  Placeholders: TITLE BRANDS BUY_TEXT GIFT_TEXT GIFT_PHOTO_TAG GIFT_SKU_TAG QTY_TAG PERIOD_TEXT
+-->
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<style>
+{{TOKENS_CSS}}
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:var(--canvas-w); height:var(--canvas-h); }
+
+.frame { width:var(--canvas-w); height:var(--canvas-h); background:var(--cny-yellow);
+  padding:var(--frame-pad); position:relative; font-family:var(--font-body); }
+.card { width:100%; height:100%; border-radius:var(--card-radius); position:relative;
+  overflow:hidden; display:flex; flex-direction:column;
+  background:linear-gradient(165deg, #FFFFFF 0%, #FFF7E6 70%, #FFEFC2 100%); }
+
+/* badge 🎁 GIFT มุมซ้ายบน (starburst เขียว) */
+.badge { position:absolute; top:18px; left:22px; width:150px; height:150px; z-index:6;
+  background:var(--cny-green); color:#fff; font-family:var(--font-head); font-weight:800;
+  font-size:30px; line-height:1.0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+  box-shadow:0 6px 14px rgba(0,0,0,.20);
+  clip-path:polygon(50% 0,61% 12%,78% 7%,80% 25%,98% 30%,88% 46%,100% 60%,82% 67%,84% 86%,66% 82%,54% 98%,42% 84%,24% 90%,22% 71%,4% 66%,16% 50%,2% 36%,20% 30%,18% 11%,37% 14%); }
+.badge small { font-size:22px; font-weight:700; }
+
+.logo { position:absolute; top:34px; right:40px; z-index:6; height:78px; }
+
+/* ชื่อแคมเปญ + แบรนด์ */
+.title { margin:50px 180px 0; text-align:center; font-family:var(--font-head);
+  font-weight:800; font-size:50px; line-height:1.12; color:var(--cny-blue); }
+.brands { margin:10px 160px 0; text-align:center; font-family:var(--font-body);
+  font-weight:600; font-size:26px; color:var(--cny-blue-mid); }
+
+/* เงื่อนไขซื้อครบ — แถบใหญ่ */
+.buy-band { margin:26px auto 0; padding:16px 46px; width:max-content; max-width:86%;
+  background:var(--cny-red); color:#fff; border-radius:18px; text-align:center;
+  font-family:var(--font-head); font-weight:800; font-size:54px; line-height:1.05;
+  box-shadow:0 8px 0 rgba(0,0,0,.12); }
+
+/* ของแถม: รูป + ชื่อ */
+.gift-zone { flex:1 1 auto; min-height:0; display:flex; align-items:center;
+  justify-content:center; gap:34px; padding:18px 70px 6px; }
+.gift-photo { max-width:46%; max-height:100%; object-fit:contain;
+  filter:drop-shadow(0 18px 30px rgba(0,0,0,.20)); }
+.gift-col { display:flex; flex-direction:column; gap:14px; align-items:flex-start; max-width:46%; }
+.gift-label { font-family:var(--font-head); font-weight:800; font-size:40px; color:var(--cny-green); }
+.gift-name { font-family:var(--font-head); font-weight:700; font-size:40px; line-height:1.15; color:var(--cny-ink); }
+.gift-sku { background:var(--cny-red-deep); color:#fff; font-family:var(--font-head);
+  font-weight:700; font-size:26px; padding:6px 22px; border-radius:11px; width:max-content; }
+.qty { background:#fff; border:4px solid var(--cny-red-deep); color:var(--cny-red-deep);
+  font-family:var(--font-head); font-weight:800; font-size:28px; padding:8px 22px;
+  border-radius:14px; width:max-content; }
+
+/* ช่วงเวลา */
+.period { flex:0 0 auto; text-align:center; padding:0 44px 16px;
+  font-family:var(--font-body); font-weight:700; font-size:27px; color:var(--cny-red-deep); }
+
+.footer-slot { flex:0 0 auto; }
+</style>
+</head>
+<body>
+  <div class="frame"><div class="card">
+    <div class="badge">ซื้อครบ<small>มีแถม</small></div>
+    <img class="logo" src="{{LOGO}}" alt="CNY HEALTH CARE">
+
+    <div class="title">{{TITLE}}</div>
+    <div class="brands">{{BRANDS}}</div>
+
+    <div class="buy-band">{{BUY_TEXT}}</div>
+
+    <div class="gift-zone">
+      {{GIFT_PHOTO_TAG}}
+      <div class="gift-col">
+        <div class="gift-label">🎁 รับฟรี!</div>
+        <div class="gift-name">{{GIFT_TEXT}}</div>
+        {{GIFT_SKU_TAG}}
+        {{QTY_TAG}}
+      </div>
+    </div>
+
+    <div class="period">{{PERIOD_TEXT}}</div>
+
+    <div class="footer-slot">{{FOOTER}}</div>
+  </div></div>
+</body>
+</html>

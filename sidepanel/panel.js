@@ -6,18 +6,25 @@ import { extractPromotions, buildPromoProducts, money } from '../lib/promo.js';
 import { buildCarousels, buildFlexMessage } from '../lib/flex-builder.js';
 import { validate, fmtBytes } from '../lib/validate.js';
 import { buildAiRequest, buildTestRequest, buildBridgeRunRequest, buildEditPrompt, buildAiTextRequest, buildCodexImageRequest, textFromResponse, parseEditResponse } from '../lib/ai.js';
-import { buildBanner, buildOverlay } from '../lib/compositor.js';
+import { buildBanner } from '../lib/compositor.js';
+import { PROMPT_KIT, composePrompt, defaultSelection } from '../lib/promptkit.js';
+import { cutoutWhiteBg, isMostlyWhiteEdges } from '../lib/cutout.js';
 import { buildImageRequest, parseImageResponse } from '../lib/imagegen.js';
 import { buildUploadRequest, parseUploadResponse } from '../lib/imagehost.js';
 import { buildContentPrompt, parseContentResponse } from '../lib/content.js';
 
-const PRESET_OPTIONS = [
+const BASE_PRESETS = [
   ['flash', '⚡ Flash Sale'],
   ['lastlot', '🔥 ล็อตสุดท้าย'],
   ['member', '💎 ราคาสมาชิก'],
   ['custom', 'กำหนดเอง'],
 ];
+// user-defined presets ({id,label,badgeText,badgeColor}) live alongside the base set
+let customPresets = [];
+const presetOptions = () => [...BASE_PRESETS, ...customPresets.map((c) => [c.id, c.label])];
 const SIZE_PX = { xs: 11, sm: 13, md: 15, lg: 18, xl: 22, xxl: 28 };
+const KIT_KEY = { purpose: 'purposeId', style: 'styleId', theme: 'themeId', mood: 'moodId' };
+const KIT_LABEL = { purpose: 'จุดประสงค์', style: 'สไตล์', theme: 'ธีม/โทนสี', elements: 'องค์ประกอบ', mood: 'อารมณ์' };
 const GET_PROMOTION = 'https://www.cnypharmacy.com/api/getPromotionProduct';
 
 // ---- state ----------------------------------------------------------------
@@ -26,6 +33,12 @@ const presetByCode = new Map();
 const selectedCodes = new Set();
 let search = '';
 let viewMode = 'grid';
+let page = 1;               // product-list pagination (rendering 6k cards at once freezes the DOM)
+const PER_PAGE = 60;
+let sortBy = '';            // '' | 'discount' | 'expiry'
+let pFilter = 'all';        // 'all' | 'discount' | 'giveaway' — promo-type chips above the list
+let genMode = 'product';    // AI image gen mode: 'product' (ref-based) | 'bg' (scene only)
+const kitSel = { product: defaultSelection('product'), bg: defaultSelection('bg') };
 let aiOverride = null; // when set, preview/export use this AI-edited flex payload
 let lastSourceLabel = ''; // for the cache hint (e.g. "โปรโมชัน")
 let chatMode = 'advise'; // 'advise' (suggest then apply) | 'apply' (edit now)
@@ -87,6 +100,7 @@ function bindTabs() {
 
 function bindSourceButtons() {
   $('#load-promo').addEventListener('click', loadPromo);
+  $('#promo-token').addEventListener('change', () => save({ promoToken: $('#promo-token').value.trim() }));
   $('#load-cny').addEventListener('click', loadCny);
   $('#load-sheet').addEventListener('click', loadSheet);
   $('#load-json-url').addEventListener('click', loadJsonUrl);
@@ -96,6 +110,7 @@ function bindSourceButtons() {
 // ---- loaders --------------------------------------------------------------
 async function loadPromo() {
   const token = $('#promo-token').value.trim();
+  save({ promoToken: token }); // remember the full-set token for next launch
   loadStatus('กำลังโหลดแคตตาล็อก + แคมเปญโปร…');
 
   const first = await proxyFetch(cnyPageUrl(1, 100));
@@ -219,6 +234,7 @@ function loadJsonFile(e) {
 
 function applyProducts(list, sheetUrl, sheetName, extra = {}) {
   products = list;
+  page = 1;
   presetByCode.clear();
   selectedCodes.clear();
   for (const p of products) presetByCode.set(p.code, p.promoType);
@@ -235,9 +251,9 @@ function applyProducts(list, sheetUrl, sheetName, extra = {}) {
 
 // ---- product controls -----------------------------------------------------
 function bindProductControls() {
-  $('#search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); renderList(); });
+  $('#search').addEventListener('input', (e) => { search = e.target.value.trim().toLowerCase(); page = 1; renderList(); });
   $('#select-all').addEventListener('click', () => {
-    visibleProducts().forEach((p) => selectedCodes.add(p.code));
+    pageProducts().forEach((p) => selectedCodes.add(p.code));
     renderList(); baseChanged();
   });
   $('#clear-all').addEventListener('click', () => { selectedCodes.clear(); renderList(); baseChanged(); });
@@ -248,8 +264,60 @@ function bindProductControls() {
     e.target.value = '';
     renderList(); baseChanged();
   });
+  $('#sort-by').addEventListener('change', (e) => { sortBy = e.target.value; page = 1; renderList(); });
   $('#view-grid').addEventListener('click', () => setView('grid'));
   $('#view-list').addEventListener('click', () => setView('list'));
+  $('#filter-chips').addEventListener('click', (e) => {
+    const c = e.target.closest('.fchip');
+    if (!c) return;
+    pFilter = c.dataset.pfilter;
+    $$('.fchip').forEach((x) => x.classList.toggle('active', x === c));
+    page = 1; renderList();
+  });
+  bindPresetManager();
+}
+
+// ---- custom preset manager (⚙️) -------------------------------------------
+function bindPresetManager() {
+  $('#preset-manage').addEventListener('click', () => $('#preset-editor').classList.toggle('hidden'));
+  $('#np-add').addEventListener('click', () => {
+    const label = $('#np-label').value.trim();
+    const badgeText = $('#np-badge').value.trim() || label;
+    if (!label) return;
+    customPresets.push({ id: `c_${Date.now()}`, label, badgeText, badgeColor: $('#np-color').value });
+    $('#np-label').value = ''; $('#np-badge').value = '';
+    save({ customPresets });
+    renderCustomPresets(); refreshPresetSelects(); renderList();
+  });
+  renderCustomPresets();
+}
+
+function renderCustomPresets() {
+  const host = $('#preset-custom-list');
+  host.textContent = '';
+  if (!customPresets.length) { host.appendChild(empty('ยังไม่มี preset กำหนดเอง')); return; }
+  for (const c of customPresets) {
+    const row = el('div', 'cpreset-row');
+    const chip = el('span', 'cpreset-chip');
+    chip.textContent = c.badgeText; chip.style.background = c.badgeColor;
+    const name = el('span'); name.textContent = c.label;
+    const del = el('button', 'btn-ghost sm'); del.textContent = '✕';
+    del.addEventListener('click', () => {
+      customPresets = customPresets.filter((x) => x.id !== c.id);
+      save({ customPresets });
+      renderCustomPresets(); refreshPresetSelects(); renderList();
+    });
+    row.append(chip, name, del);
+    host.appendChild(row);
+  }
+}
+
+// repopulate the bulk-preset dropdown after custom presets change
+function refreshPresetSelects() {
+  const bulk = $('#bulk-preset');
+  const keep = bulk.firstElementChild; // "preset…" placeholder
+  bulk.textContent = ''; bulk.appendChild(keep);
+  for (const [v, l] of presetOptions()) { const o = el('option'); o.value = v; o.textContent = l; bulk.appendChild(o); }
 }
 
 function setView(mode) {
@@ -260,9 +328,45 @@ function setView(mode) {
 }
 
 function visibleProducts() {
-  if (!search) return products;
-  return products.filter((p) =>
+  let list = !search ? products : products.filter((p) =>
     p.code.toLowerCase().includes(search) || p.name.toLowerCase().includes(search));
+  if (pFilter === 'discount') {
+    list = list.filter((p) => p._promo && p._promo.type !== 'giveaway' && p.priceSale != null);
+  } else if (pFilter === 'giveaway') {
+    list = list.filter((p) => (p._promo && p._promo.type === 'giveaway') || /แถม/.test(p.note || ''));
+  }
+  if (sortBy === 'discount') {
+    list = [...list].sort((a, b) => discountPct(b) - discountPct(a));
+  } else if (sortBy === 'expiry') {
+    list = [...list].sort((a, b) => (expiryTs(a) ?? Infinity) - (expiryTs(b) ?? Infinity));
+  }
+  return list;
+}
+
+// Campaign end (`end_pro`) as a timestamp, or null when the promo has no expiry.
+function expiryTs(p) {
+  const raw = p._promo && p._promo.endsAt;
+  if (!raw) return null;
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? t : null;
+}
+
+// Hard Rule 5: surface expiring/expired promos before they get rendered.
+function expiryInfo(p) {
+  const t = expiryTs(p);
+  if (t == null) return null;
+  const days = Math.floor((t - Date.now()) / 86400000);
+  if (days < 0) return { expired: true, label: '⏰ โปรหมดอายุ' };
+  if (days <= 3) return { expired: false, label: days === 0 ? '⏰ หมดวันนี้' : `⏰ เหลือ ${days} วัน` };
+  return null;
+}
+
+// The slice of the filtered list shown on the current page.
+function pageProducts() {
+  const list = visibleProducts();
+  const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+  if (page > pages) page = pages;
+  return list.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 }
 
 function renderList() {
@@ -274,11 +378,38 @@ function renderList() {
   const list = visibleProducts();
   $('#result-count').textContent = `พบ ${list.length} รายการ`;
 
-  if (products.length === 0) { host.appendChild(empty('ยังไม่มีข้อมูล — โหลดจากแหล่งด้านบนก่อน')); updateCount(); return; }
-  if (list.length === 0) { host.appendChild(empty('ไม่พบสินค้าตามคำค้น')); updateCount(); return; }
+  if (products.length === 0) { host.appendChild(empty('ยังไม่มีข้อมูล — โหลดจากแหล่งด้านบนก่อน')); updateCount(); renderPager(0); return; }
+  if (list.length === 0) { host.appendChild(empty('ไม่พบสินค้าตามคำค้น')); updateCount(); renderPager(0); return; }
 
-  for (const p of list) host.appendChild(productCard(p));
+  for (const p of pageProducts()) host.appendChild(productCard(p));
   updateCount();
+  renderPager(list.length);
+}
+
+// Page controls under the list: ‹ ก่อนหน้า · หน้า X/Y · ถัดไป ›
+function renderPager(total) {
+  const pagerHost = $('#product-pager');
+  if (!pagerHost) return;
+  pagerHost.textContent = '';
+  const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+  if (total <= PER_PAGE) return; // single page — no controls needed
+
+  const mk = (label, target, disabled) => {
+    const b = el('button', 'btn-ghost sm');
+    b.textContent = label;
+    b.disabled = disabled;
+    b.addEventListener('click', () => {
+      page = target;
+      renderList();
+      $('#products-card')?.scrollIntoView({ block: 'start' });
+    });
+    return b;
+  };
+  pagerHost.appendChild(mk('‹ ก่อนหน้า', page - 1, page <= 1));
+  const info = el('span', 'pager-info');
+  info.textContent = `หน้า ${page} / ${pages}`;
+  pagerHost.appendChild(info);
+  pagerHost.appendChild(mk('ถัดไป ›', page + 1, page >= pages));
 }
 
 function productCard(p) {
@@ -311,7 +442,7 @@ function productCard(p) {
   info.append(code, name);
 
   const preset = el('select', 'ppreset');
-  for (const [v, l] of PRESET_OPTIONS) { const o = el('option'); o.value = v; o.textContent = l; preset.appendChild(o); }
+  for (const [v, l] of presetOptions()) { const o = el('option'); o.value = v; o.textContent = l; preset.appendChild(o); }
   preset.value = presetByCode.get(p.code) || 'custom';
   preset.addEventListener('change', () => { presetByCode.set(p.code, preset.value); baseChanged(); });
 
@@ -321,6 +452,12 @@ function productCard(p) {
     const disc = el('div', 'pdisc');
     disc.textContent = `-${pct}%`;
     card.appendChild(disc);
+  }
+  const exp = expiryInfo(p);
+  if (exp) {
+    const chip = el('div', 'pexp' + (exp.expired ? ' expired' : ''));
+    chip.textContent = exp.label;
+    card.appendChild(chip);
   }
   if (p.badgeText) {
     const badge = el('div', 'pbadge');
@@ -390,20 +527,35 @@ function pickLocalImage(p, imgEl, card) {
   inp.click();
 }
 
-function updateCount() { $('#selected-count').textContent = `(${selectedCodes.size} เลือก)`; }
+function updateCount() {
+  $('#selected-count').textContent = `(${selectedCodes.size} เลือก)`;
+  // pill on the สินค้า tab so the selection is visible from every page
+  const pill = $('#tab-selected');
+  if (pill) {
+    pill.textContent = String(selectedCodes.size);
+    pill.classList.toggle('hidden', selectedCodes.size === 0);
+  }
+}
 
 // ---- payload (auto-built or AI-edited) ------------------------------------
 function selectedProducts() {
   return products
     .filter((p) => selectedCodes.has(p.code))
-    .map((p) => ({ ...p, promoType: presetByCode.get(p.code) || p.promoType }));
+    .map((p) => {
+      const pr = presetByCode.get(p.code) || p.promoType;
+      const c = customPresets.find((x) => x.id === pr);
+      // custom preset -> 'custom' template slot + its own badge text/color
+      if (c) return { ...p, promoType: 'custom', badgeText: c.badgeText || c.label, badgeColor: c.badgeColor || '#E8000D' };
+      return { ...p, promoType: pr };
+    });
 }
 
 function autoPayload() {
   const sel = selectedProducts();
   if (!sel.length) return null;
   const alt = $('#alt-text').value.trim() || 'โปรโมชั่นสินค้า';
-  const messages = buildCarousels(sel).map((c) => buildFlexMessage(c, alt));
+  const tmpl = $('#flex-template') ? $('#flex-template').value : 'classic';
+  const messages = buildCarousels(sel, { template: tmpl }).map((c) => buildFlexMessage(c, alt));
   return messages.length === 1 ? messages[0] : messages;
 }
 
@@ -589,6 +741,7 @@ function msgEl(text, kind) { const s = el('span', `msg ${kind}`); s.textContent 
 // ---- export ---------------------------------------------------------------
 function bindExport() {
   $('#alt-text').addEventListener('input', () => { if (!aiOverride) rebuild(); });
+  $('#flex-template')?.addEventListener('change', () => { aiOverride = null; rebuild(); });
   $('#copy-json').addEventListener('click', copyJson);
   $('#download-json').addEventListener('click', downloadJson);
   $('#open-sim').addEventListener('click', openSimulator);
@@ -628,7 +781,48 @@ function downloadJson() {
 }
 
 // ---- AI chat --------------------------------------------------------------
+// ---- separate chat window (chatBus relay; contract in desktop/main.js) ----
+function sendChatContext() {
+  if (!window.chatBus) return;
+  const payload = currentPayload();
+  const sel = selectedProducts();
+  window.chatBus.send('chat', 'context', {
+    flexJson: payload ? JSON.stringify(payload) : null,
+    productsSummary: sel.length
+      ? `${sel.length} สินค้า: ${sel.slice(0, 3).map((p) => p.name).join(', ')}${sel.length > 3 ? '…' : ''}`
+      : 'ยังไม่เลือกสินค้า',
+    backend: {
+      kind: $('#ai-backend').value === 'bridge' ? 'bridge' : 'api',
+      bridgeUrl: $('#bridge-url').value.trim(),
+      apiKey: $('#api-key').value.trim(),
+    },
+  });
+}
+
+function bindChatWindow() {
+  $('#open-chat-window').addEventListener('click', async () => {
+    if (!window.chatBus) return chatStatus('หน้าต่างแชทใช้ได้ในแอปเดสก์ท็อปเท่านั้น', true);
+    await window.chatBus.open();
+    sendChatContext();
+  });
+  if (!window.chatBus) return;
+  window.chatBus.on(({ type, data }) => {
+    if (type === 'chat-ready') {
+      sendChatContext();
+    } else if (type === 'apply-flex') {
+      try {
+        aiOverride = data.flex;
+        rebuild();
+        window.chatBus.send('chat', 'applied', { ok: true });
+      } catch {
+        window.chatBus.send('chat', 'applied', { ok: false });
+      }
+    }
+  });
+}
+
 function bindChat() {
+  bindChatWindow();
   $('#ai-backend').addEventListener('change', () => {
     applyBackendUi();
     save({ aiBackend: $('#ai-backend').value });
@@ -819,12 +1013,17 @@ function bindImageTab() {
   $('#gen-composite').addEventListener('click', genComposite);
   $('#gen-ai-image').addEventListener('click', genAiImage);
   $('#cutout-bg').addEventListener('click', cutoutBackground);
+  $('#clear-composite-out').addEventListener('click', () => { $('#composite-out').textContent = ''; setStatus('#composite-status', ''); });
+  $('#clear-ai-out').addEventListener('click', () => { $('#ai-image-out').textContent = ''; setStatus('#ai-image-status', ''); });
+  $('#clear-gwp-out').addEventListener('click', () => { $('#gwp-out').textContent = ''; setStatus('#gwp-status', ''); });
+  bindGenModes();
+  bindGwp();
+  bindFlexD();
   $('#save-img-key').addEventListener('click', () => {
     save({ imgProvider: $('#img-provider').value, imgKey: $('#img-key').value.trim() });
     setStatus('#ai-image-status', 'บันทึก key แล้ว');
   });
   $('#img-provider').addEventListener('change', () => { save({ imgProvider: $('#img-provider').value }); applyImgProviderUi(); });
-  $('#img-prompt-preset').addEventListener('change', applyPromptPreset);
   bindRefImage();
   bindImageHost();
   bindPromoSettings();
@@ -885,6 +1084,120 @@ async function uploadImage(input, name) {
 // Append an "upload → URL" control to an image card's footer. getDataUrl()
 // returns the image as a data URL; product (optional) lets the URL be set as
 // the product's Flex hero image in one click.
+// ---- Template D: image-grid Flex from uploaded artwork ---------------------
+const uploadedBanners = []; // { url, code } — hosted HTTPS images this session
+
+function updateFlexDBar() {
+  const n = uploadedBanners.length;
+  const count = $('#flexd-count');
+  const btn = $('#make-flex-d');
+  if (!count || !btn) return;
+  count.textContent = n ? `รูปที่อัปโหลดแล้ว ${n} รูป` : 'อัปโหลดรูป (☁️) แล้วเอามาจัดเป็น Flex ได้ที่นี่';
+  btn.disabled = n === 0;
+}
+
+function bindFlexD() {
+  $('#make-flex-d')?.addEventListener('click', () => {
+    if (!uploadedBanners.length) return;
+    const alt = $('#alt-text').value.trim() || 'โปรโมชั่นสินค้า';
+    // full-bleed 1:1 image bubbles, 12 per carousel (LINE limit)
+    const bubbles = uploadedBanners.map((b) => ({
+      type: 'bubble',
+      size: 'mega',
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '0px',
+        contents: [{ type: 'image', url: b.url, size: 'full', aspectMode: 'cover', aspectRatio: '1:1' }],
+      },
+    }));
+    const messages = [];
+    for (let i = 0; i < bubbles.length; i += 12) {
+      messages.push({
+        type: 'flex', altText: alt,
+        contents: { type: 'carousel', contents: bubbles.slice(i, i + 12) },
+      });
+    }
+    aiOverride = messages.length === 1 ? messages[0] : messages;
+    rebuild();
+    setStatus('#flexd-status', `จัด Flex จาก ${uploadedBanners.length} รูปแล้ว — ดู/ส่งออกได้ที่แท็บ 🎨 ดีไซน์ Flex`);
+    document.querySelector('.maintab[data-mainpane="flex"]')?.click();
+  });
+}
+
+// ---- Template C: partner / GWP card ---------------------------------------
+let gwpPhoto = null; // data URL of the gift photo
+
+function bindGwp() {
+  $('#gwp-photo').addEventListener('change', () => {
+    const f = $('#gwp-photo').files && $('#gwp-photo').files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { gwpPhoto = String(reader.result); setStatus('#gwp-status', 'ตั้งรูปของแถมแล้ว'); };
+    reader.readAsDataURL(f);
+  });
+  $('#gwp-photo-from-product').addEventListener('click', async () => {
+    const sel = selectedProducts();
+    if (!sel.length) return setStatus('#gwp-status', 'เลือกสินค้าก่อน (ที่แท็บ สินค้า)', true);
+    setStatus('#gwp-status', 'กำลังดึงรูปสินค้า…');
+    const d = await fetchImageData(sel[0].imageUrl);
+    if (!d) return setStatus('#gwp-status', 'ดึงรูปไม่สำเร็จ', true);
+    gwpPhoto = `data:${d.mime};base64,${d.base64}`;
+    setStatus('#gwp-status', `ใช้รูปของ ${sel[0].code} เป็นรูปของแถมแล้ว`);
+  });
+  $('#gwp-prefill').addEventListener('click', gwpPrefill);
+  $('#gen-gwp').addEventListener('click', genGwpCard);
+}
+
+// Prefill the form from a selected product that carries a giveaway campaign
+// (campaignText like "แถม สินค้า SKU 6645 ดีเดย์ ฟิชออย … 1 กล่อง").
+function gwpPrefill() {
+  const sel = selectedProducts();
+  const gw = sel.find((p) => p._promo && p._promo.type === 'giveaway') || sel.find((p) => p.note);
+  if (!gw) return setStatus('#gwp-status', 'ไม่พบโปรของแถมในสินค้าที่เลือก — เลือกสินค้าที่มีป้าย 🎁 ก่อน', true);
+  const note = gw.note || '';
+  $('#gwp-title').value = $('#gwp-title').value || (gw._promo && gw._promo.campaignName) || `โปรของแถม — ${gw.name}`;
+  $('#gwp-buy').value = $('#gwp-buy').value || `ซื้อ ${gw.name}`;
+  $('#gwp-gift').value = $('#gwp-gift').value || note.replace(/^แถม\s*(สินค้า)?\s*/, '').trim();
+  const skuM = /SKU\s*(\d+)/i.exec(note);
+  if (skuM && !$('#gwp-sku').value) $('#gwp-sku').value = skuM[1];
+  if (gw._promo && gw._promo.endsAt && !$('#gwp-period').value) {
+    $('#gwp-period').value = `วันนี้ – ${gw._promo.endsAt}`;
+  }
+  setStatus('#gwp-status', 'เติมข้อมูลจากโปรของแถมแล้ว — ตรวจ/แก้ได้ก่อนสร้าง');
+}
+
+async function genGwpCard() {
+  if (typeof window.cardRender !== 'function') return setStatus('#gwp-status', 'ฟีเจอร์นี้ใช้ได้ในแอปเดสก์ท็อป', true);
+  const title = $('#gwp-title').value.trim();
+  const buy = $('#gwp-buy').value.trim();
+  const gift = $('#gwp-gift').value.trim();
+  if (!title || !buy || !gift) return setStatus('#gwp-status', 'กรอกอย่างน้อย: ชื่อแคมเปญ + เงื่อนไขซื้อ + ของแถม', true);
+  const rec = {
+    title,
+    brands: $('#gwp-brands').value.trim(),
+    buy_text: buy,
+    gift_text: gift,
+    gift_photo: gwpPhoto || '',
+    gift_sku: $('#gwp-sku').value.trim(),
+    qty_text: $('#gwp-qty').value.trim(),
+    period_text: $('#gwp-period').value.trim(),
+  };
+  setStatus('#gwp-status', 'กำลังสร้างการ์ด GWP…');
+  let res;
+  try { res = await window.cardRender(rec, { template: 'c' }); }
+  catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+  if (!res || !res.ok) return setStatus('#gwp-status', 'สร้างไม่สำเร็จ' + (res && res.error ? `: ${res.error}` : ''), true);
+  const out = $('#gwp-out');
+  const card = el('div', 'banner-card');
+  const img = el('img'); img.src = res.dataUrl; card.appendChild(img);
+  const foot = el('div', 'bc-foot');
+  const dl = el('a'); dl.textContent = 'ดาวน์โหลด'; dl.download = 'gwp-card.png'; dl.href = res.dataUrl;
+  foot.appendChild(dl);
+  attachUpload(foot, () => res.dataUrl, null);
+  card.appendChild(foot);
+  out.prepend(card);
+  setStatus('#gwp-status', 'สร้างการ์ด GWP เสร็จ');
+}
+
 function attachUpload(foot, getDataUrl, product) {
   const btn = el('button');
   btn.textContent = '☁️ อัปโหลด→URL';
@@ -904,6 +1217,9 @@ function attachUpload(foot, getDataUrl, product) {
 }
 
 function showUploadedUrl(foot, url, product) {
+  // remember for Template D (image-grid Flex from finished artwork)
+  uploadedBanners.push({ url, code: product && product.code ? product.code : '' });
+  updateFlexDBar();
   const row = el('div', 'upload-url');
   const inp = el('input'); inp.type = 'text'; inp.readOnly = true; inp.value = url;
   const copy = el('button'); copy.textContent = 'คัดลอก';
@@ -975,21 +1291,61 @@ function renderRef(dataUrl) {
 // Preset image prompts. {p} is replaced by the selected product's name (or a
 // generic "สินค้า" when nothing is selected). Drug-ad safe: describes the scene
 // only, never medical claims.
-const IMG_PROMPT_TEMPLATES = {
-  studio: 'ภาพถ่ายโฆษณาสินค้า {p} บนพื้นหลังสีขาวสะอาดแบบสตูดิโอ จัดแสงนุ่มนวลรอบด้าน โฟกัสคมชัด สไตล์ร้านยามืออาชีพ ดูน่าเชื่อถือ ไม่มีข้อความบนภาพ',
-  wood: 'ภาพถ่ายสินค้า {p} วางบนโต๊ะไม้ธรรมชาติ แสงแดดอ่อนยามเช้า มีพืชสีเขียวเบลอด้านหลัง โทนอบอุ่น สไตล์ออร์แกนิก สะอาดตา ไม่มีข้อความบนภาพ',
-  cny: 'ภาพถ่ายสินค้า {p} ธีมตรุษจีน โทนสีแดง-ทอง ประดับลายมงคลจีน อั่งเปา ดอกไม้มงคล บรรยากาศเทศกาลรื่นเริง หรูหรา ไม่มีข้อความบนภาพ',
-  flatlay: 'ภาพ flat-lay มุมมองจากด้านบนของสินค้า {p} จัดวางอย่างมินิมอล พื้นหลังโทนพาสเทล จัดองค์ประกอบสมดุล สไตล์โซเชียลมีเดีย ไม่มีข้อความบนภาพ',
-  gift: 'ภาพถ่ายสินค้า {p} จัดเป็นเซ็ตของขวัญสุขภาพในกล่องพรีเมียม ผูกโบว์ ประดับสวยงาม โทนหรูหรา เหมาะเป็นของฝาก ไม่มีข้อความบนภาพ',
-  lifestyle: 'ภาพไลฟ์สไตล์ มีมือคนกำลังถือสินค้า {p} ในบ้านที่อบอุ่นสว่าง ดูเป็นธรรมชาติ น่าเชื่อถือ โทนอุ่น ไม่มีข้อความบนภาพ',
-};
+// ---- prompt builder (promptkit chips) --------------------------------------
+function bindGenModes() {
+  $('#genmode-tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (!t) return;
+    genMode = t.dataset.genmode;
+    $$('#genmode-tabs .tab').forEach((x) => x.classList.toggle('active', x === t));
+    $('#genmode-product-only').classList.toggle('hidden', genMode !== 'product');
+    renderPromptKit(); composeKitPrompt();
+  });
+  $('#img-extra').addEventListener('input', composeKitPrompt);
+  renderPromptKit(); composeKitPrompt();
+}
 
-function applyPromptPreset() {
-  const key = $('#img-prompt-preset').value;
-  if (!key || !IMG_PROMPT_TEMPLATES[key]) return;
-  const sel = selectedProducts();
-  const name = sel.length ? sel[0].name : 'สินค้า';
-  $('#img-prompt').value = IMG_PROMPT_TEMPLATES[key].replace(/\{p\}/g, name);
+function renderPromptKit() {
+  const host = $('#promptkit');
+  host.textContent = '';
+  const sel = kitSel[genMode];
+  const cats = genMode === 'product'
+    ? ['purpose', 'style', 'theme', 'elements', 'mood']
+    : ['theme', 'style', 'elements', 'mood']; // bg mode: theme first, purpose ignored
+  for (const cat of cats) {
+    const row = el('div', 'kit-row');
+    const lab = el('span', 'kit-label'); lab.textContent = KIT_LABEL[cat];
+    row.appendChild(lab);
+    for (const opt of PROMPT_KIT[cat]) {
+      const b = el('button', 'kchip');
+      b.type = 'button';
+      b.textContent = opt.label;
+      const active = cat === 'elements' ? sel.elementIds.includes(opt.id) : sel[KIT_KEY[cat]] === opt.id;
+      if (active) b.classList.add('active');
+      b.addEventListener('click', () => {
+        if (cat === 'elements') {
+          const i = sel.elementIds.indexOf(opt.id);
+          if (i >= 0) sel.elementIds.splice(i, 1); else sel.elementIds.push(opt.id);
+        } else {
+          sel[KIT_KEY[cat]] = opt.id;
+        }
+        renderPromptKit(); composeKitPrompt();
+      });
+      row.appendChild(b);
+    }
+    host.appendChild(row);
+  }
+}
+
+function composeKitPrompt() {
+  const sel = kitSel[genMode];
+  const p = selectedProducts()[0];
+  $('#img-prompt').value = composePrompt({
+    mode: genMode,
+    ...sel,
+    productName: genMode === 'product' && p ? p.name : undefined,
+    extra: $('#img-extra').value.trim() || undefined,
+  });
 }
 
 function applyImgProviderUi() {
@@ -1001,6 +1357,11 @@ function applyImgProviderUi() {
 async function genComposite() {
   const sel = selectedProducts();
   if (!sel.length) return setStatus('#composite-status', 'เลือกสินค้าก่อน', true);
+  const expired = sel.filter((p) => expiryInfo(p)?.expired);
+  if (expired.length) {
+    setStatus('#composite-status',
+      `⚠️ โปรหมดอายุแล้ว ${expired.length} รายการ (${expired.map((p) => p.code).join(', ')}) — ตรวจก่อนใช้จริง`, true);
+  }
   const size = $('#img-size').value;
   const template = $('#img-template').value;
   const out = $('#composite-out');
@@ -1011,37 +1372,113 @@ async function genComposite() {
     contact: $('#promo-contact').value.trim() || undefined,
     shipFree: $('#promo-shipfree').checked,
   };
+  // promo / cny → production-accurate HTML card (skill templates A/B, rendered
+  // to PNG by Chromium); classic / bold stay on the in-page canvas compositor.
+  const useCard = (template === 'promo' || template === 'cny') && typeof window.cardRender === 'function';
   let done = 0;
   for (const p of sel) {
-    const plan = buildBanner(p, { size, template, ...promoOpts });
-    const card = el('div', 'banner-card');
-    const canvas = el('canvas');
-    canvas.width = plan.width; canvas.height = plan.height;
-    card.appendChild(canvas);
-    out.appendChild(card);
-    try { await drawPlan(canvas, plan); } catch { /* best-effort */ }
-    const foot = el('div', 'bc-foot');
-    const dl = el('a');
-    dl.textContent = 'ดาวน์โหลด'; dl.download = `promo-${p.code}.png`;
-    try { dl.href = canvas.toDataURL('image/png'); } catch { dl.textContent = '(export ไม่ได้)'; }
-    foot.appendChild(dl);
-    attachUpload(foot, () => canvas.toDataURL('image/png'), p);
-    card.appendChild(foot);
+    if (useCard) {
+      await renderPromoCard(p, template, out);
+    } else {
+      const plan = buildBanner(p, { size, template, ...promoOpts });
+      const card = el('div', 'banner-card');
+      const canvas = el('canvas');
+      canvas.width = plan.width; canvas.height = plan.height;
+      card.appendChild(canvas);
+      out.appendChild(card);
+      try { await drawPlan(canvas, plan); } catch { /* best-effort */ }
+      const foot = el('div', 'bc-foot');
+      const dl = el('a');
+      dl.textContent = 'ดาวน์โหลด'; dl.download = `promo-${p.code}.png`;
+      try { dl.href = canvas.toDataURL('image/png'); } catch { dl.textContent = '(export ไม่ได้)'; }
+      foot.appendChild(dl);
+      attachUpload(foot, () => canvas.toDataURL('image/png'), p);
+      card.appendChild(foot);
+    }
     done++;
     setStatus('#composite-status', `เสร็จ ${done}/${sel.length}`);
   }
   setStatus('#composite-status', `สร้างเสร็จ ${done} แบนเนอร์`);
 }
 
+// Drop the white studio background from a product shot so it sits naturally on
+// themed/AI cards. Skips photos that aren't white-background. PNG keeps alpha.
+function cutoutPhotoDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    const i = new Image();
+    i.onload = () => {
+      try {
+        const c = el('canvas'); c.width = i.width; c.height = i.height;
+        const x = c.getContext('2d');
+        x.drawImage(i, 0, 0);
+        const d = x.getImageData(0, 0, c.width, c.height);
+        if (!isMostlyWhiteEdges(d)) return resolve(dataUrl);
+        cutoutWhiteBg(d);
+        x.putImageData(d, 0, 0);
+        resolve(c.toDataURL('image/png'));
+      } catch { resolve(dataUrl); }
+    };
+    i.onerror = () => resolve(dataUrl);
+    i.src = dataUrl;
+  });
+}
+
+// Map an extension Product onto the skill's normalized promo record. The product
+// photo is inlined as a data: URI so the offscreen render needs no network.
+async function productToRecord(p, { cutout = false } = {}) {
+  const photo = await fetchImageData(p.imageUrl);
+  let photoUrl = photo ? `data:${photo.mime};base64,${photo.base64}` : (p.imageUrl || '');
+  if (cutout && photoUrl.startsWith('data:')) photoUrl = await cutoutPhotoDataUrl(photoUrl);
+  const save = (p.priceNormal != null && p.priceSale != null && p.priceNormal > p.priceSale)
+    ? p.priceNormal - p.priceSale : null;
+  return {
+    name: p.name || '',
+    sku: p.code || '',
+    photo: photoUrl,
+    price_normal: p.priceNormal != null ? p.priceNormal : null,
+    price_special: p.priceSale != null ? p.priceSale : null,
+    save,
+    pack_unit: (p._promo && p._promo.unit) || p.unitText || 'หน่วย',
+    pack_text: p.note || '',
+  };
+}
+
+// Render one promo card via the main-process Chromium template renderer.
+// extra.bg (a data: URL) swaps Template B's built-in theme for an AI/uploaded background.
+async function renderPromoCard(p, template, out, extra = {}) {
+  const cutout = !!$('#cutout-auto')?.checked;
+  const record = await productToRecord(p, { cutout });
+  const opts = template === 'cny' ? { template: 'b', theme: 'cny' } : { template: 'a' };
+  if (extra.bg) { opts.template = 'b'; delete opts.theme; opts.bg = extra.bg; }
+  opts.size = $('#img-size')?.value || 'square';
+  const card = el('div', 'banner-card');
+  out.appendChild(card);
+  let res;
+  try { res = await window.cardRender(record, opts); }
+  catch (e) { res = { ok: false, error: String(e && e.message || e) }; }
+  if (!res || !res.ok) {
+    card.appendChild(empty('สร้างการ์ดไม่สำเร็จ' + (res && res.error ? `: ${res.error}` : '')));
+    return;
+  }
+  const img = el('img'); img.src = res.dataUrl; card.appendChild(img);
+  const foot = el('div', 'bc-foot');
+  const dl = el('a'); dl.textContent = 'ดาวน์โหลด'; dl.download = `promo-${p.code}.png`; dl.href = res.dataUrl;
+  foot.appendChild(dl);
+  attachUpload(foot, () => res.dataUrl, p);
+  card.appendChild(foot);
+}
+
 async function genAiImage() {
   const provider = $('#img-provider').value;
   const prompt = $('#img-prompt').value.trim();
   if (!prompt) return setStatus('#ai-image-status', 'ใส่คำอธิบายรูปก่อน', true);
+  // bg mode = scene only, no product reference
+  const ref = genMode === 'product' ? refImage : null;
 
   // Codex (free) — via the bridge /genimage (runs `codex exec`, no API key).
   if (provider === 'codex') {
-    setStatus('#ai-image-status', refImage ? 'กำลังให้ Codex สร้างรูปจากเรฟ… (ทดลอง)' : 'กำลังให้ Codex สร้างรูป… (อาจ 30–90 วินาที)');
-    const req = buildCodexImageRequest($('#bridge-url').value.trim(), prompt, refImage);
+    setStatus('#ai-image-status', ref ? 'กำลังให้ Codex สร้างรูปจากเรฟ… (ทดลอง)' : 'กำลังให้ Codex สร้างรูป… (อาจ 30–90 วินาที)');
+    const req = buildCodexImageRequest($('#bridge-url').value.trim(), prompt, ref);
     const res = await proxyFetch(req.url, { method: req.method, headers: req.headers, body: req.body });
     if (res.status === 0) return setStatus('#ai-image-status', `ต่อ bridge ไม่ได้ (${res.error || 'network'}) — รัน bridge แล้วยัง?`, true);
     let data;
@@ -1055,15 +1492,15 @@ async function genAiImage() {
   // OpenAI / Gemini — needs an API key.
   const key = $('#img-key').value.trim();
   if (!key) return setStatus('#ai-image-status', 'ใส่ API key ก่อน', true);
-  if (refImage && provider === 'openai') {
+  if (ref && provider === 'openai') {
     setStatus('#ai-image-status', 'หมายเหตุ: OpenAI ยังไม่รองรับเรฟในเวอร์ชันนี้ — จะสร้างจาก prompt อย่างเดียว');
   }
-  setStatus('#ai-image-status', refImage && provider === 'gemini' ? 'กำลังสร้างรูปจากเรฟ (Gemini)…' : 'กำลังสร้างรูป… (อาจใช้เวลาหน่อย)');
+  setStatus('#ai-image-status', ref && provider === 'gemini' ? 'กำลังสร้างรูปจากเรฟ (Gemini)…' : 'กำลังสร้างรูป… (อาจใช้เวลาหน่อย)');
   let req;
   try {
     req = buildImageRequest(provider, key, prompt, {
       size: $('#img-ai-size').value,
-      refImage: provider === 'gemini' ? refImage : null,
+      refImage: provider === 'gemini' ? ref : null,
     });
   }
   catch (e) { return setStatus('#ai-image-status', e.message, true); }
@@ -1137,38 +1574,32 @@ function showAiImage(dataUrl) {
   const foot = el('div', 'bc-foot');
   const dl = el('a'); dl.textContent = 'ดาวน์โหลด'; dl.download = 'ai-image.png'; dl.href = dataUrl;
   foot.appendChild(dl);
-  // Turn the AI scene into a sellable ad: overlay crisp price/badge/CTA text.
-  const ov = el('button'); ov.textContent = '➕ ใส่ราคา/ข้อความโปร';
-  ov.addEventListener('click', () => overlayPromoText(dataUrl));
-  foot.appendChild(ov);
+  // The AI scene becomes Template B's Layer 0; the card renderer composites the
+  // real product photo + crisp HTML prices/promo/footer on top.
+  if (typeof window.cardRender === 'function') {
+    const tb = el('button'); tb.textContent = '➕ ทำการ์ดโปรจากรูปนี้ (สินค้า + ราคา)';
+    tb.addEventListener('click', () => aiBgToCards(dataUrl));
+    foot.appendChild(tb);
+  }
   attachUpload(foot, () => dataUrl, selectedProducts()[0]);
   card.appendChild(foot);
   out.appendChild(card);
 }
 
-// Composite crisp promo text (from the selected product) over a background
-// image (an AI result or upload), and append the finished ad to the output.
-async function overlayPromoText(bgDataUrl) {
+// AI background → full Template B promo cards for every selected product:
+// Layer 0 = the AI scene, Layer 1 = real product photo, Layer 2 = exact prices.
+async function aiBgToCards(bgDataUrl) {
   const sel = selectedProducts();
-  if (!sel.length) return setStatus('#ai-image-status', 'เลือกสินค้าก่อน เพื่อดึงราคา/ชื่อมาวางบนรูป', true);
-  const p = sel[0];
-  const size = $('#img-size').value;
-  setStatus('#ai-image-status', 'กำลังวางข้อความโปรบนรูป…');
-  const plan = buildOverlay(p, { size, bgImage: bgDataUrl });
+  if (!sel.length) return setStatus('#ai-image-status', 'เลือกสินค้าก่อน — จะวางรูปสินค้า + ราคาลงบนพื้นหลังนี้', true);
   const out = $('#ai-image-out');
-  const card = el('div', 'banner-card');
-  const canvas = el('canvas');
-  canvas.width = plan.width; canvas.height = plan.height;
-  card.appendChild(canvas);
-  out.appendChild(card);
-  try { await drawPlan(canvas, plan); } catch { /* best-effort */ }
-  const foot = el('div', 'bc-foot');
-  const dl = el('a'); dl.textContent = 'ดาวน์โหลดโฆษณา'; dl.download = `ad-${p.code}.png`;
-  try { dl.href = canvas.toDataURL('image/png'); } catch { dl.textContent = '(export ไม่ได้)'; }
-  foot.appendChild(dl);
-  attachUpload(foot, () => canvas.toDataURL('image/png'), p);
-  card.appendChild(foot);
-  setStatus('#ai-image-status', 'วางข้อความโปรเสร็จ — ดาวน์โหลดได้เลย');
+  let done = 0;
+  setStatus('#ai-image-status', `กำลังทำการ์ดโปรจากพื้นหลัง AI… (${sel.length} สินค้า)`);
+  for (const p of sel) {
+    await renderPromoCard(p, 'cny', out, { bg: bgDataUrl });
+    done++;
+    setStatus('#ai-image-status', `การ์ดเสร็จ ${done}/${sel.length}`);
+  }
+  setStatus('#ai-image-status', `ทำการ์ดโปรเสร็จ ${done} ใบ — รูปสินค้า + ราคาคมชัดบนพื้นหลัง AI`);
 }
 
 // ---- canvas draw-plan renderer (executes compositor output) --------------
@@ -1369,7 +1800,11 @@ function save(obj) { try { chrome.storage?.local?.set(obj); } catch { /* ignore 
 
 async function restore() {
   try {
-    const s = await chrome.storage.local.get(['sheetUrl', 'sheetName', 'jsonUrl', 'anthropicKey', 'cachedProducts', 'aiBackend', 'bridgeUrl', 'imgProvider', 'imgKey', 'hostProvider', 'imgbbKey', 'cldCloud', 'cldPreset', 'promoLogo', 'promoContact', 'promoShipfree']);
+    const s = await chrome.storage.local.get(['sheetUrl', 'sheetName', 'jsonUrl', 'anthropicKey', 'cachedProducts', 'aiBackend', 'bridgeUrl', 'imgProvider', 'imgKey', 'hostProvider', 'imgbbKey', 'cldCloud', 'cldPreset', 'promoLogo', 'promoContact', 'promoShipfree', 'promoToken', 'customPresets']);
+    if (Array.isArray(s.customPresets)) {
+      customPresets = s.customPresets;
+      renderCustomPresets(); refreshPresetSelects();
+    }
     if (s.sheetUrl) $('#sheet-url').value = s.sheetUrl;
     if (s.sheetName) $('#sheet-name').value = s.sheetName;
     if (s.jsonUrl) $('#json-url').value = s.jsonUrl;
@@ -1385,6 +1820,11 @@ async function restore() {
     if (s.promoLogo) promoLogo = s.promoLogo;
     if (s.promoContact) $('#promo-contact').value = s.promoContact;
     if (s.promoShipfree === false) $('#promo-shipfree').checked = false;
+    if (s.promoToken) {
+      $('#promo-token').value = s.promoToken;
+      const d = $('#promo-token').closest('details');
+      if (d) d.open = true; // surface the saved full-set token on launch
+    }
     applyBackendUi();
     applyImgProviderUi();
     applyHostProviderUi();
@@ -1406,7 +1846,7 @@ function proxyFetch(url, opts = {}) {
   return new Promise((resolve) => {
     try {
       chrome.runtime.sendMessage(
-        { type: 'fetch', url, method: opts.method, headers: opts.headers, body: opts.body },
+        { type: 'fetch', url, method: opts.method, headers: opts.headers, body: opts.body, binary: opts.binary },
         (resp) => {
           if (chrome.runtime.lastError) {
             resolve({ ok: false, status: 0, error: chrome.runtime.lastError.message });

@@ -1,0 +1,48 @@
+<!-- themes/cny.html — Layer 0 พื้นหลังตรุษจีน (CSS/SVG, ไม่ต้องใช้ AI) -->
+<style>
+.bg-cny { position:absolute; inset:0; z-index:0; overflow:hidden;
+  background:radial-gradient(120% 80% at 50% 0%, #E23B2E 0%, #C8102E 38%, #8E0B22 100%); }
+.bg-cny .glow { position:absolute; inset:0;
+  background:
+    radial-gradient(40% 30% at 18% 22%, rgba(255,200,0,.30), transparent 70%),
+    radial-gradient(40% 30% at 84% 30%, rgba(255,200,0,.22), transparent 70%),
+    radial-gradient(60% 40% at 50% 100%, rgba(255,200,0,.18), transparent 70%); }
+.bg-cny .dots { position:absolute; inset:0; opacity:.5;
+  background-image:radial-gradient(rgba(255,214,90,.55) 2px, transparent 3px); background-size:46px 46px; }
+.bg-cny .stage { position:absolute; left:11%; right:11%; top:29%; bottom:25%;
+  background:radial-gradient(closest-side, rgba(255,255,255,.92), rgba(255,255,255,.5) 68%, transparent 100%);
+  filter:blur(3px); }
+.bg-cny .orn { position:absolute; }
+</style>
+<div class="bg-cny">
+  <div class="glow"></div>
+  <div class="dots"></div>
+  <div class="stage"></div>
+  <svg class="orn" style="top:-10px;left:60px;width:120px;height:240px" viewBox="0 0 120 240">
+    <line x1="60" y1="0" x2="60" y2="40" stroke="#FFD34D" stroke-width="3"/>
+    <ellipse cx="60" cy="95" rx="46" ry="56" fill="#E0102A" stroke="#FFD34D" stroke-width="4"/>
+    <path d="M30 60h60M28 130h64" stroke="#FFD34D" stroke-width="3" opacity=".7"/>
+    <rect x="46" y="38" width="28" height="12" rx="3" fill="#FFB300"/>
+    <rect x="46" y="150" width="28" height="12" rx="3" fill="#FFB300"/>
+    <path d="M52 162l-4 40M60 162v44M68 162l4 40" stroke="#FFD34D" stroke-width="3"/>
+  </svg>
+  <svg class="orn" style="top:-26px;right:80px;width:96px;height:210px" viewBox="0 0 120 240">
+    <line x1="60" y1="0" x2="60" y2="40" stroke="#FFD34D" stroke-width="3"/>
+    <ellipse cx="60" cy="95" rx="40" ry="50" fill="#E0102A" stroke="#FFD34D" stroke-width="4"/>
+    <rect x="48" y="40" width="24" height="11" rx="3" fill="#FFB300"/>
+    <rect x="48" y="146" width="24" height="11" rx="3" fill="#FFB300"/>
+    <path d="M54 158l-3 34M60 158v38M66 158l3 34" stroke="#FFD34D" stroke-width="3"/>
+  </svg>
+  <svg class="orn" style="bottom:150px;left:40px;width:140px;height:140px" viewBox="0 0 140 140">
+    <circle cx="70" cy="70" r="58" fill="#C8102E" stroke="#FFD34D" stroke-width="6"/>
+    <circle cx="70" cy="70" r="46" fill="none" stroke="#FFD34D" stroke-width="2" opacity=".7"/>
+    <text x="70" y="96" font-size="62" text-anchor="middle" fill="#FFD34D" font-family="serif" font-weight="700">福</text>
+  </svg>
+  <svg class="orn" style="bottom:170px;right:30px;width:120px;height:120px" viewBox="0 0 140 140">
+    <g fill="#FFD34D" opacity=".9">
+      <circle cx="70" cy="40" r="13"/><circle cx="100" cy="62" r="13"/><circle cx="88" cy="98" r="13"/>
+      <circle cx="52" cy="98" r="13"/><circle cx="40" cy="62" r="13"/>
+      <circle cx="70" cy="70" r="16" fill="#E0102A" stroke="#FFD34D" stroke-width="3"/>
+    </g>
+  </svg>
+</div>

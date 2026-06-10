@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!--
+  Template B — โปสเตอร์ธีม/ซีซั่น 1080x1080
+  Layer 0 = {{BG_LAYER}} (AI gen image หรือ themed CSS/SVG) | Layer 1 = PHOTO | Layer 2 = HTML/CSS
+  ราคา/ชื่อ/รหัส = HTML/CSS เสมอ (เลขแม่น)
+-->
+<html lang="th"><head><meta charset="utf-8"><style>
+{{TOKENS_CSS}}
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:var(--canvas-w); height:var(--canvas-h); }
+.frame { width:var(--canvas-w); height:var(--canvas-h); background:var(--cny-yellow);
+  padding:var(--frame-pad); position:relative; font-family:var(--font-body); }
+.card { width:100%; height:100%; border-radius:var(--card-radius); position:relative;
+  overflow:hidden; display:flex; flex-direction:column; background:#fff; }
+
+.bg-layer { position:absolute; inset:0; z-index:0; }
+.bg-layer .bg-img { width:100%; height:100%; object-fit:cover; }
+.content { position:relative; z-index:2; display:flex; flex-direction:column; height:100%; }
+
+/* badge SPECIAL OFFER (gold) มุมซ้ายบน */
+.badge { position:absolute; top:30px; left:30px; z-index:6; background:var(--cny-yellow);
+  color:var(--cny-red-deep); font-family:var(--font-head); font-weight:800; font-size:30px;
+  padding:12px 26px; border-radius:12px; box-shadow:0 5px 14px rgba(0,0,0,.28); transform:rotate(-3deg); }
+/* โลโก้ + ลด% มุมขวาบน */
+.logo { position:absolute; top:30px; right:34px; z-index:6; height:70px; filter:drop-shadow(0 3px 6px rgba(0,0,0,.3)); }
+.disc { position:absolute; top:120px; right:36px; z-index:6; width:120px; height:120px; border-radius:50%;
+  background:var(--cny-yellow); color:var(--cny-red-deep); border:5px solid #fff;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-family:var(--font-head); line-height:.9; box-shadow:0 6px 14px rgba(0,0,0,.3); transform:rotate(8deg); }
+.disc .l { font-size:24px; font-weight:600; } .disc .p { font-size:46px; font-weight:800; }
+
+/* title (ขาว มี shadow) */
+.title { margin:120px 150px 0; text-align:center; font-family:var(--font-head); font-weight:800;
+  font-size:50px; line-height:1.14; color:#fff; text-shadow:0 3px 12px rgba(0,0,0,.45); }
+
+/* รูปสินค้า */
+.photo-wrap { flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center; padding:14px 90px; }
+.photo-wrap img { max-width:78%; max-height:100%; object-fit:contain; filter:drop-shadow(0 20px 34px rgba(0,0,0,.35)); }
+
+/* price chip + CTA */
+.price-zone { flex:0 0 auto; display:flex; align-items:flex-end; justify-content:space-between; padding:0 40px 20px; gap:18px; }
+.cta-col { display:flex; flex-direction:column; gap:12px; align-items:flex-start; }
+.cta { background:var(--cny-yellow); color:var(--cny-red-deep); font-family:var(--font-head);
+  font-weight:800; font-size:34px; padding:14px 30px; border-radius:40px; box-shadow:0 5px 0 rgba(0,0,0,.18); }
+.save-burst { background:var(--cny-green); color:#fff; font-family:var(--font-head); font-weight:800;
+  font-size:30px; padding:10px 22px; border-radius:13px; transform:rotate(-4deg); }
+.price-col { display:flex; flex-direction:column; align-items:flex-end; }
+.code-tag { background:var(--cny-red-deep); color:#fff; font-family:var(--font-head); font-weight:700;
+  font-size:27px; padding:6px 22px; border-radius:11px; margin-bottom:9px; }
+.price-box { position:relative; background:#fff; border-radius:20px; padding:26px 32px 16px; text-align:right;
+  min-width:320px; box-shadow:0 10px 30px rgba(0,0,0,.30); }
+.price-box .plabel { position:absolute; top:-20px; left:22px; background:var(--cny-red); color:#fff;
+  font-family:var(--font-head); font-weight:700; font-size:24px; padding:5px 18px; border-radius:9px; }
+.price-was { font-family:var(--font-body); font-weight:500; font-size:26px; color:var(--cny-gray); text-decoration:line-through; }
+.price-now { font-family:var(--font-head); font-weight:800; color:var(--cny-red-deep); line-height:.92; }
+.price-now .baht { font-size:50px; } .price-now .num { font-size:104px; } .price-now .end { font-size:42px; }
+
+.footer-slot { flex:0 0 auto; }
+</style></head>
+<body>
+  <div class="frame"><div class="card">
+    <div class="bg-layer">{{BG_LAYER}}</div>
+    <div class="content">
+      <div class="badge">SPECIAL OFFER</div>
+      <img class="logo" src="{{LOGO}}" alt="CNY">
+      {{DISC_BADGE}}
+      <div class="title">{{NAME}}</div>
+      <div class="photo-wrap"><img src="{{PHOTO}}" alt=""></div>
+      <div class="price-zone">
+        <div class="cta-col">
+          <div class="cta">{{CTA}}</div>
+          {{SAVE_BURST}}
+        </div>
+        <div class="price-col">
+          <div class="code-tag">รหัส {{SKU}}</div>
+          <div class="price-box">
+            <div class="plabel">ราคาพิเศษ</div>
+            <div class="price-was">{{PRICE_WAS}}</div>
+            <div class="price-now"><span class="baht">฿</span><span class="num">{{PRICE_NOW}}</span><span class="end">.-</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="footer-slot">{{FOOTER}}</div>
+    </div>
+  </div></div>
+</body></html>

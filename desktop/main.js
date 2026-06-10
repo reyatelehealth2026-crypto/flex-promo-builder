@@ -47,6 +47,53 @@ ipcMain.handle('store-set', (_e, obj) => {
 
 ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
 
+// Render a promo card (skill template A/B) to PNG with the bundled Chromium.
+const { renderCard } = require('./card-renderer.cjs');
+ipcMain.handle('render-card', async (_e, { record, opts }) => {
+  try {
+    return { ok: true, dataUrl: await renderCard(record || {}, opts || {}) };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+// Window refs for the chat relay (offscreen capture windows from
+// card-renderer.cjs also live in getAllWindows(), so keep explicit refs).
+let mainWin = null;
+let chatWin = null;
+
+// AI design chat in its OWN window so the main window never lags.
+function createChatWindow() {
+  if (chatWin && !chatWin.isDestroyed()) { chatWin.focus(); return; }
+  chatWin = new BrowserWindow({
+    width: 480,
+    height: 720,
+    title: 'แชทกับ AI — แก้ดีไซน์',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: false,  // same shim as the main window
+      nodeIntegration: false,
+      webSecurity: false,       // chat.js imports ../lib/ai.js over file://
+    },
+  });
+  chatWin.removeMenu();
+  chatWin.loadFile(path.join(__dirname, '..', 'sidepanel', 'chat.html'));
+  chatWin.on('closed', () => { chatWin = null; });
+}
+
+ipcMain.handle('open-chat-window', () => { createChatWindow(); return { ok: true }; });
+
+// Relay between main panel and chat window: {to:'main'|'chat', type, data}
+// → other window receives webContents.send('chat-msg', {type, data}).
+ipcMain.handle('chat-relay', (_e, { to, type, data }) => {
+  const target = to === 'chat' ? chatWin : mainWin;
+  if (target && !target.isDestroyed()) {
+    target.webContents.send('chat-msg', { type, data });
+    return { ok: true, delivered: true };
+  }
+  return { ok: true, delivered: false };
+});
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1180,
@@ -61,6 +108,8 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, '..', 'sidepanel', 'panel.html'));
+  mainWin = win;
+  win.on('closed', () => { mainWin = null; });
 }
 
 app.whenReady().then(createWindow);

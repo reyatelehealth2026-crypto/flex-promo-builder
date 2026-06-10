@@ -29,3 +29,15 @@ window.chrome = {
     create: ({ url }) => ipcRenderer.invoke('open-external', url), // "เปิดใน LINE Simulator"
   },
 };
+
+// Promo-card renderer (skill templates A/B → PNG via Chromium capturePage).
+// panel.js: const { ok, dataUrl } = await window.cardRender(record, opts)
+window.cardRender = (record, opts) => ipcRenderer.invoke('render-card', { record, opts });
+
+// AI chat window bus — open the chat BrowserWindow and relay messages between
+// the main panel and chat.js: send(to,type,data) → other window's on(cb).
+window.chatBus = {
+  open: () => ipcRenderer.invoke('open-chat-window'),
+  send: (to, type, data) => ipcRenderer.invoke('chat-relay', { to, type, data }),
+  on: (cb) => ipcRenderer.on('chat-msg', (_e, m) => cb(m)),
+};

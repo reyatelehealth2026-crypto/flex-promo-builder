@@ -1,0 +1,38 @@
+/* ============================================================
+   CNY Promo Creative — Brand Tokens
+   ดึงค่าจากตัวอย่างโปรจริง (promo-0081/0085, ad-0078, Nexcare)
+   ============================================================ */
+:root {
+  /* --- Core palette --- */
+  --cny-red:        #E51E25;  /* primary action / badge */
+  --cny-red-deep:   #C8102E;  /* price box border, รหัส tag */
+  --cny-blue:       #002689;  /* ชื่อสินค้า / หัวข้อ (สีจริงจากการ์ด production) */
+  --cny-blue-mid:   #3754A2;  /* ข้อความ footer */
+  --cny-cyan:       #00ACD4;  /* accent โลโก้ */
+  --cny-yellow:     #FFC400;  /* promo frame */
+  --cny-green:      #27AE60;  /* ประหยัด / savings */
+  --line-green:     #06C755;  /* LINE / ส่งฟรี */
+  --cny-ink:        #1A1A1A;  /* price number */
+  --cny-gray:       #8A8A8A;  /* strikethrough / secondary */
+  --cny-white:      #FFFFFF;
+
+  /* --- Typography --- */
+  --font-head: 'Prompt', 'Loma', sans-serif;   /* หัวข้อ/ราคา — geometric, bold */
+  --font-body: 'Sarabun', 'Loma', sans-serif;  /* รายละเอียด — อ่านง่าย */
+
+  /* --- Canvas --- */
+  --canvas-w:    1080px;     /* default 1:1 social/LINE — renderer overrides per size */
+  --canvas-h:    1080px;
+  --frame-pad:   28px;       /* ความหนากรอบเหลือง */
+  --card-radius: 28px;
+}
+
+/* ฟอนต์ฝังจาก assets/fonts (render.py แทน {{FONT_DIR}} เป็น path จริง) */
+@font-face { font-family:'Prompt'; font-weight:400; src:url('{{FONT_DIR}}/Prompt-Regular.ttf'); }
+@font-face { font-family:'Prompt'; font-weight:500; src:url('{{FONT_DIR}}/Prompt-Medium.ttf'); }
+@font-face { font-family:'Prompt'; font-weight:600; src:url('{{FONT_DIR}}/Prompt-SemiBold.ttf'); }
+@font-face { font-family:'Prompt'; font-weight:700; src:url('{{FONT_DIR}}/Prompt-Bold.ttf'); }
+@font-face { font-family:'Prompt'; font-weight:800; src:url('{{FONT_DIR}}/Prompt-ExtraBold.ttf'); }
+@font-face { font-family:'Sarabun'; font-weight:400; src:url('{{FONT_DIR}}/Sarabun-Regular.ttf'); }
+@font-face { font-family:'Sarabun'; font-weight:500; src:url('{{FONT_DIR}}/Sarabun-Medium.ttf'); }
+@font-face { font-family:'Sarabun'; font-weight:700; src:url('{{FONT_DIR}}/Sarabun-Bold.ttf'); }
