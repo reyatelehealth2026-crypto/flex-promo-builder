@@ -1,0 +1,15 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Rust
+rust/target/
+
+# frb codegen output (regenerate with `flutter_rust_bridge_codegen generate`)
+lib/data/bridge/generated/
+
+# IDE
+.idea/
+*.iml

@@ -1,0 +1,15 @@
+# flutter_rust_bridge v2 codegen config.
+# Run from app/:  flutter_rust_bridge_codegen generate
+#
+# Scans app/rust/src/api/** and writes:
+#   - rust:  app/rust/src/frb_generated.rs   (overwrites the placeholder)
+#   - dart:  app/lib/data/bridge/generated/  (frb_generated.dart + api/...)
+#
+# After the first successful run, switch lib/data/bridge/bridge_service.dart
+# from the hand-written *.stub.dart to the generated bindings (one import +
+# one class — see the header of prom9_api.stub.dart).
+rust_input: crate::api
+rust_root: rust
+dart_output: lib/data/bridge/generated
+dart_entrypoint_class_name: RustLib
+enable_lifetime: false

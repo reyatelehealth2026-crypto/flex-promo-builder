@@ -1,0 +1,52 @@
+name: prom9_app
+description: >-
+  Prom9 — LINE Flex promo builder (Phase 3 Flutter prototype).
+  Product hub + flex preview + export validation + CustomPainter card
+  renderer, backed by the prom9_core Rust crate via flutter_rust_bridge v2.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0" # Color.withValues + Dart 3.6
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management: Riverpod — compile-safe providers, easy composition of
+  # search query + filter + selection into one derived product-list provider,
+  # and trivially testable without a widget tree.
+  flutter_riverpod: ^2.5.1
+
+  # FFI bridge runtime (v2). The Dart package version MUST match the
+  # flutter_rust_bridge_codegen version and the Rust crate version
+  # (see app/rust/Cargo.toml and README.md).
+  flutter_rust_bridge: ^2.9.0
+
+  # SQLite: package:sqlite3 (direct dart:ffi bindings) + sqlite3_flutter_libs
+  # (bundles an up-to-date SQLite compiled WITH FTS5 on every platform).
+  # Chosen over sqflite because sqflite links the OS-provided SQLite, where
+  # FTS5 availability varies by Android/iOS version — a bundled library makes
+  # the products_fts virtual table + triggers a hard guarantee. The
+  # synchronous FFI API also makes the 10k-SKU batch insert (single
+  # transaction + prepared statement) far faster than platform-channel
+  # round-trips. Drift would work too (it sits on package:sqlite3) but raw
+  # SQL keeps the FTS5 schema/triggers explicit for this prototype.
+  sqlite3: ^2.4.6
+  sqlite3_flutter_libs: ^0.5.24
+
+  # DB file location.
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Export screen "share" action (falls back to the OS share sheet).
+  share_plus: ^10.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
