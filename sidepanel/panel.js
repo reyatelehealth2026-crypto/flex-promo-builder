@@ -1505,7 +1505,7 @@ async function genAiImage() {
   }
   catch (e) { return setStatus('#ai-image-status', e.message, true); }
   const res = await proxyFetch(req.url, { method: req.method, headers: req.headers, body: req.body });
-  if (!res.ok) return setStatus('#ai-image-status', `เรียกไม่สำเร็จ (${res.status || 'network'}) ${res.error || ''}`.trim(), true);
+  if (!res.ok) return setStatus('#ai-image-status', `เรียกไม่สำเร็จ (${res.status || 'network'}) ${apiErrorDetail(res)}`.trim(), true);
   let json;
   try { json = JSON.parse(res.text); }
   catch { return setStatus('#ai-image-status', 'ตอบกลับไม่ใช่ JSON', true); }
@@ -1554,7 +1554,7 @@ async function cutoutBackground() {
   try { req = buildImageRequest('gemini', key, prompt, { refImage: ref }); }
   catch (e) { return setStatus('#ai-image-status', e.message, true); }
   const res = await proxyFetch(req.url, { method: req.method, headers: req.headers, body: req.body });
-  if (!res.ok) return setStatus('#ai-image-status', `เรียกไม่สำเร็จ (${res.status || 'network'}) ${res.error || ''}`.trim(), true);
+  if (!res.ok) return setStatus('#ai-image-status', `เรียกไม่สำเร็จ (${res.status || 'network'}) ${apiErrorDetail(res)}`.trim(), true);
   let json;
   try { json = JSON.parse(res.text); }
   catch { return setStatus('#ai-image-status', 'ตอบกลับไม่ใช่ JSON', true); }
@@ -1842,6 +1842,18 @@ async function restore() {
 }
 
 // GET by default; pass { method, headers, body } for POST (AI call).
+// Pull the human-readable error message out of a failed API response
+// (OpenAI/Gemini both put it under error.message in the JSON body).
+function apiErrorDetail(res) {
+  if (res.error) return res.error;
+  try {
+    const j = JSON.parse(res.text);
+    const e = j && j.error;
+    if (e) return (typeof e === 'string' ? e : e.message || e.status || '');
+  } catch { /* not JSON — fall through */ }
+  return (res.text || '').slice(0, 200);
+}
+
 function proxyFetch(url, opts = {}) {
   return new Promise((resolve) => {
     try {
