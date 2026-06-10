@@ -15,6 +15,23 @@ const STORE_PATH = path.join(app.getPath('userData'), 'store.json');
 const readStore = () => { try { return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8')); } catch { return {}; } };
 const writeStore = (o) => { try { fs.writeFileSync(STORE_PATH, JSON.stringify(o)); } catch (e) { console.error('store write', e.message); } };
 
+// store-set used to hit the disk on every IPC call; keep the live copy in
+// memory and coalesce writes (~300ms), flushing on quit.
+let storeCache = null;
+let storeTimer = null;
+let storeDirty = false;
+const getStore = () => (storeCache ??= readStore());
+function scheduleStoreWrite() {
+  storeDirty = true;
+  clearTimeout(storeTimer);
+  storeTimer = setTimeout(flushStore, 300);
+}
+function flushStore() {
+  clearTimeout(storeTimer);
+  storeTimer = null;
+  if (storeDirty) { storeDirty = false; writeStore(getStore()); }
+}
+
 ipcMain.handle('fetch', async (_e, { url, method, headers, body, binary }) => {
   try {
     const res = await fetch(url, { method: method || 'GET', headers: headers || {}, body, redirect: 'follow' });
@@ -30,7 +47,7 @@ ipcMain.handle('fetch', async (_e, { url, method, headers, body, binary }) => {
 });
 
 ipcMain.handle('store-get', (_e, keys) => {
-  const all = readStore();
+  const all = getStore();
   if (!keys) return all;
   const arr = Array.isArray(keys) ? keys : [keys];
   const out = {};
@@ -39,9 +56,8 @@ ipcMain.handle('store-get', (_e, keys) => {
 });
 
 ipcMain.handle('store-set', (_e, obj) => {
-  const all = readStore();
-  Object.assign(all, obj);
-  writeStore(all);
+  Object.assign(getStore(), obj);
+  scheduleStoreWrite();
   return true;
 });
 
@@ -115,3 +131,4 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', flushStore); // don't lose a pending debounced write

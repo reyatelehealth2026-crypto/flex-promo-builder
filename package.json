@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "description": "Flex Promo Builder — desktop app (Electron). Build LINE Flex promo carousels from CNY data, edit design via Claude Code, export JSON.",
   "main": "desktop/main.js",
+  "type": "module",
   "scripts": {
     "start": "electron .",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "fixtures": "node test/golden/gen-fixtures.mjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win"
   },

@@ -1,4 +1,5 @@
 {
   "private": true,
-  "note": "App config + scripts moved to ../package.json (project root). Run npm install / npm start / npm run dist from the project root, not here."
+  "type": "commonjs",
+  "note": "App config + scripts moved to ../package.json (project root). Run npm install / npm start / npm run dist from the project root, not here. type:commonjs keeps main.js/preload.js CJS now that the root package.json declares type:module."
 }

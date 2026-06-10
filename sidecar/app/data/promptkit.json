@@ -1,0 +1,62 @@
+{
+  "purpose": [
+    {
+      "id": "ads",
+      "label": "โฆษณา",
+      "frag": "high-impact advertising hero shot, bold composition, strong focal point on the product, eye-catching commercial photography"
+    },
+    {
+      "id": "poster",
+      "label": "โปสเตอร์",
+      "frag": "promotional poster composition, product placed in lower two-thirds, generous open space above for headline overlay, balanced visual hierarchy"
+    },
+    {
+      "id": "product_info",
+      "label": "แนะนำสินค้า",
+      "frag": "clean product showcase, informative catalog style, product clearly visible and well lit, neutral presentation that highlights packaging details"
+    },
+    {
+      "id": "drug_info",
+      "label": "แนะนำยา",
+      "frag": "professional pharmacy presentation, clean clinical and trustworthy look, calm reassuring tone, no medical claims text, no exaggerated cure imagery, no before-after comparison, suitable for a licensed Thai pharmacy"
+    },
+    {
+      "id": "social_post",
+      "label": "โพสต์โซเชียล",
+      "frag": "scroll-stopping social media visual, vibrant but tasteful, square-friendly centered composition, lifestyle appeal for Facebook and LINE feeds"
+    }
+  ],
+  "style": [
+    { "id": "studio", "label": "สตูดิโอ", "frag": "professional studio photography, seamless backdrop, controlled softbox lighting, crisp shadows" },
+    { "id": "lifestyle", "label": "ไลฟ์สไตล์", "frag": "natural lifestyle setting, everyday home or pharmacy environment, candid warm atmosphere" },
+    { "id": "flatlay", "label": "แฟลตเลย์", "frag": "top-down flat lay arrangement, neatly styled props around the edges, clean surface" },
+    { "id": "premium", "label": "พรีเมียม", "frag": "luxury premium aesthetic, elegant dark or satin backdrop, dramatic rim lighting, high-end product photography" },
+    { "id": "minimal", "label": "มินิมอล", "frag": "minimalist composition, lots of negative space, single accent color, simple geometric shapes" },
+    { "id": "photo_real", "label": "สมจริง", "frag": "ultra photorealistic, 8k detail, natural color grading, shot on professional DSLR with 85mm lens" }
+  ],
+  "theme": [
+    { "id": "cny_redgold", "label": "ตรุษจีน แดง-ทอง", "frag": "Chinese New Year theme, rich red and gold color palette, festive oriental patterns, lanterns softly glowing in background" },
+    { "id": "clean_blue", "label": "ฟ้า-ขาว สะอาด เภสัช", "frag": "clean pharmacy theme, light blue and white color palette, fresh hygienic feel, soft gradient background" },
+    { "id": "nature_green", "label": "ธรรมชาติ เขียว", "frag": "natural green theme, fresh leaves and botanical elements, organic healthy atmosphere, soft daylight" },
+    { "id": "pastel_soft", "label": "พาสเทล นุ่มนวล", "frag": "soft pastel color palette, gentle pink peach and cream tones, dreamy diffused light, friendly approachable mood" },
+    { "id": "songkran", "label": "สงกรานต์ ฟ้า-น้ำ", "frag": "Songkran festival theme, refreshing blue and aqua water tones, splashing water droplets, bright Thai summer feel" },
+    { "id": "newyear_gold", "label": "ปีใหม่ ทอง", "frag": "New Year celebration theme, champagne gold and deep navy palette, glittering festive ambience" },
+    { "id": "none", "label": "ไม่ระบุธีม", "frag": "" }
+  ],
+  "elements": [
+    { "id": "angpao", "label": "อั่งเปา", "frag": "red envelopes (ang pao) placed decoratively at the edges" },
+    { "id": "flowers", "label": "ดอกไม้", "frag": "fresh flowers and petals arranged around the border" },
+    { "id": "gift_box", "label": "กล่องของขวัญ", "frag": "wrapped gift boxes with ribbons in the background" },
+    { "id": "natural_light", "label": "แสงธรรมชาติ", "frag": "soft natural window light with gentle shadows" },
+    { "id": "bokeh", "label": "โบเก้", "frag": "beautiful bokeh light orbs in the blurred background" },
+    { "id": "water_splash", "label": "สายน้ำกระเซ็น", "frag": "dynamic water splash frozen in motion around the scene" },
+    { "id": "sparkle", "label": "ประกายวิบวับ", "frag": "subtle sparkle and shimmer particles catching the light" },
+    { "id": "none", "label": "ไม่มี", "frag": "" }
+  ],
+  "mood": [
+    { "id": "warm", "label": "อบอุ่น", "frag": "warm inviting mood, golden hour color temperature, cozy feeling" },
+    { "id": "urgent", "label": "เร่งด่วน ลดแรง", "frag": "high-energy sale atmosphere, dynamic diagonal composition, bold saturated colors that convey urgency" },
+    { "id": "trustworthy", "label": "น่าเชื่อถือ", "frag": "calm professional and trustworthy mood, balanced symmetric composition, clean reassuring tones" },
+    { "id": "festive", "label": "เทศกาล รื่นเริง", "frag": "joyful festive celebration mood, lively decorative atmosphere, cheerful bright lighting" }
+  ]
+}
