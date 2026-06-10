@@ -7,43 +7,19 @@ import { buildCarousels, buildFlexMessage } from '../lib/flex-builder.js';
 import { validate, fmtBytes } from '../lib/validate.js';
 import { buildAiRequest, buildTestRequest, buildBridgeRunRequest, buildEditPrompt, buildAiTextRequest, buildCodexImageRequest, textFromResponse, parseEditResponse } from '../lib/ai.js';
 import { buildBanner } from '../lib/compositor.js';
-import { PROMPT_KIT, composePrompt, defaultSelection } from '../lib/promptkit.js';
+import { PROMPT_KIT, composePrompt } from '../lib/promptkit.js';
 import { cutoutWhiteBg, isMostlyWhiteEdges } from '../lib/cutout.js';
 import { buildImageRequest, parseImageResponse } from '../lib/imagegen.js';
 import { buildUploadRequest, parseUploadResponse } from '../lib/imagehost.js';
 import { buildContentPrompt, parseContentResponse } from '../lib/content.js';
+import { state, PER_PAGE, presetOptions, visibleProducts, expiryTs, expiryInfo, pageProducts, discountPct } from './state.js';
 
-const BASE_PRESETS = [
-  ['flash', '⚡ Flash Sale'],
-  ['lastlot', '🔥 ล็อตสุดท้าย'],
-  ['member', '💎 ราคาสมาชิก'],
-  ['custom', 'กำหนดเอง'],
-];
-// user-defined presets ({id,label,badgeText,badgeColor}) live alongside the base set
-let customPresets = [];
-const presetOptions = () => [...BASE_PRESETS, ...customPresets.map((c) => [c.id, c.label])];
 const SIZE_PX = { xs: 11, sm: 13, md: 15, lg: 18, xl: 22, xxl: 28 };
 const KIT_KEY = { purpose: 'purposeId', style: 'styleId', theme: 'themeId', mood: 'moodId' };
 const KIT_LABEL = { purpose: 'จุดประสงค์', style: 'สไตล์', theme: 'ธีม/โทนสี', elements: 'องค์ประกอบ', mood: 'อารมณ์' };
 const GET_PROMOTION = 'https://www.cnypharmacy.com/api/getPromotionProduct';
 
-// ---- state ----------------------------------------------------------------
-let products = [];
-const presetByCode = new Map();
-const selectedCodes = new Set();
-let search = '';
-let viewMode = 'grid';
-let page = 1;               // product-list pagination (rendering 6k cards at once freezes the DOM)
-const PER_PAGE = 60;
-let sortBy = '';            // '' | 'discount' | 'expiry'
-let pFilter = 'all';        // 'all' | 'discount' | 'giveaway' — promo-type chips above the list
-let genMode = 'product';    // AI image gen mode: 'product' (ref-based) | 'bg' (scene only)
-const kitSel = { product: defaultSelection('product'), bg: defaultSelection('bg') };
-let aiOverride = null; // when set, preview/export use this AI-edited flex payload
-let lastSourceLabel = ''; // for the cache hint (e.g. "โปรโมชัน")
-let chatMode = 'advise'; // 'advise' (suggest then apply) | 'apply' (edit now)
-let refImage = null; // { mime, base64 } reference image for AI image gen (image-to-image)
-let promoLogo = null; // data URL of the shop logo for the SPECIAL PROMO card
+// UI state lives in ./state.js (shared `state` object + pure selectors).
 
 // ---- dom helpers ----------------------------------------------------------
 const $ = (sel) => document.querySelector(sel);
@@ -84,7 +60,7 @@ function bindModeToggle() {
   $('#mode-apply').addEventListener('click', () => setChatMode('apply'));
 }
 function setChatMode(m) {
-  chatMode = m;
+  state.chatMode = m;
   $('#mode-advise').classList.toggle('active', m === 'advise');
   $('#mode-apply').classList.toggle('active', m === 'apply');
 }
@@ -132,7 +108,7 @@ async function loadPromo() {
   const flats = flattenCnyPages(rawPages);
   const promoProducts = buildPromoProducts(flats, promoMap);
 
-  lastSourceLabel = token ? 'โปรโมชัน (ชุดเต็ม)' : 'โปรโมชัน';
+  state.lastSourceLabel = token ? 'โปรโมชัน (ชุดเต็ม)' : 'โปรโมชัน';
   applyProducts(promoProducts);
   loadStatus(`โหลดโปรโมชัน ${promoProducts.length} รายการ${token ? ' (ชุดเต็ม)' : ' (ชุดสาธารณะ)'}`);
 }
@@ -153,7 +129,7 @@ async function loadCny() {
     .filter((p) => p.code && p.name && /^https:\/\//i.test(p.imageUrl));
 
   const filtered = theme && theme !== 'all' ? filterCny(all, { theme }) : all;
-  lastSourceLabel = `แคตตาล็อก${theme !== 'all' ? ` (${theme})` : ''}`;
+  state.lastSourceLabel = `แคตตาล็อก${theme !== 'all' ? ` (${theme})` : ''}`;
   applyProducts(filtered);
   loadStatus(`โหลดแคตตาล็อก ${filtered.length} รายการ${theme !== 'all' ? ` (หมวด ${theme})` : ''} จากทั้งหมด ${all.length}`);
 }
@@ -173,7 +149,7 @@ async function fetchAllCatalogPages(page1) {
     const batch = rest.slice(i, i + CONC);
     const results = await Promise.all(batch.map((p) => proxyFetch(cnyPageUrl(p, 100))));
     for (const r of results) {
-      if (r.ok) { try { rawPages.push(JSON.parse(r.text)); } catch { /* skip bad page */ } }
+      if (r.ok) { try { rawPages.push(JSON.parse(r.text)); } catch { /* skip bad state.page */ } }
     }
     done = Math.min(done + batch.length, pages);
     loadStatus(`โหลด ${done}/${pages} หน้า…`);
@@ -194,7 +170,7 @@ async function loadSheet() {
   const res = await proxyFetch(csvUrl);
   if (!res.ok) return loadStatus(`โหลดไม่สำเร็จ (${res.status || ''}) ${res.error || ''}`.trim(), true);
 
-  try { lastSourceLabel = 'Google Sheet'; applyProducts(normalizeFromCsv(res.text), url, name); }
+  try { state.lastSourceLabel = 'Google Sheet'; applyProducts(normalizeFromCsv(res.text), url, name); }
   catch (e) { loadStatus('แปลง CSV ไม่สำเร็จ: ' + e.message, true); }
 }
 
@@ -209,7 +185,7 @@ async function loadJsonUrl() {
   try {
     const data = JSON.parse(res.text);
     const list = isCnyPayload(data) ? normalizeFromCny(data) : normalizeFromJson(data);
-    lastSourceLabel = 'JSON URL';
+    state.lastSourceLabel = 'JSON URL';
     applyProducts(list, null, null, { jsonUrl: url });
   } catch (e) {
     loadStatus('แปลง JSON ไม่สำเร็จ: ' + e.message, true);
@@ -223,7 +199,7 @@ function loadJsonFile(e) {
   reader.onload = () => {
     try {
       const data = JSON.parse(String(reader.result));
-      lastSourceLabel = 'JSON ไฟล์';
+      state.lastSourceLabel = 'JSON ไฟล์';
       applyProducts(isCnyPayload(data) ? normalizeFromCny(data) : normalizeFromJson(data));
     } catch (err) {
       loadStatus('อ่านไฟล์ไม่สำเร็จ: ' + err.message, true);
@@ -234,17 +210,17 @@ function loadJsonFile(e) {
 }
 
 function applyProducts(list, sheetUrl, sheetName, extra = {}) {
-  products = list;
-  page = 1;
-  presetByCode.clear();
-  selectedCodes.clear();
-  for (const p of products) presetByCode.set(p.code, p.promoType);
+  state.products = list;
+  state.page = 1;
+  state.presetByCode.clear();
+  state.selectedCodes.clear();
+  for (const p of state.products) state.presetByCode.set(p.code, p.promoType);
 
   if (sheetUrl !== undefined && sheetUrl !== null) save({ sheetUrl, sheetName });
   if (extra.jsonUrl) save({ jsonUrl: extra.jsonUrl });
 
   // cache the (slow-to-fetch) product list so reopening the panel is instant
-  save({ cachedProducts: { products, label: lastSourceLabel, fetchedAt: Date.now() } });
+  save({ cachedProducts: { products: state.products, label: state.lastSourceLabel, fetchedAt: Date.now() } });
 
   renderList();
   baseChanged();
@@ -253,28 +229,28 @@ function applyProducts(list, sheetUrl, sheetName, extra = {}) {
 // ---- product controls -----------------------------------------------------
 function bindProductControls() {
   // debounced: typing into a 6k-product list re-renders at most every 150ms
-  $('#search').addEventListener('input', debounce((e) => { search = e.target.value.trim().toLowerCase(); page = 1; renderList(); }, 150));
+  $('#search').addEventListener('input', debounce((e) => { state.search = e.target.value.trim().toLowerCase(); state.page = 1; renderList(); }, 150));
   $('#select-all').addEventListener('click', () => {
-    pageProducts().forEach((p) => selectedCodes.add(p.code));
+    pageProducts().forEach((p) => state.selectedCodes.add(p.code));
     renderList(); baseChanged();
   });
-  $('#clear-all').addEventListener('click', () => { selectedCodes.clear(); renderList(); baseChanged(); });
+  $('#clear-all').addEventListener('click', () => { state.selectedCodes.clear(); renderList(); baseChanged(); });
   $('#bulk-preset').addEventListener('change', (e) => {
     const v = e.target.value;
     if (!v) return;
-    selectedCodes.forEach((code) => presetByCode.set(code, v));
+    state.selectedCodes.forEach((code) => state.presetByCode.set(code, v));
     e.target.value = '';
     renderList(); baseChanged();
   });
-  $('#sort-by').addEventListener('change', (e) => { sortBy = e.target.value; page = 1; renderList(); });
+  $('#sort-by').addEventListener('change', (e) => { state.sortBy = e.target.value; state.page = 1; renderList(); });
   $('#view-grid').addEventListener('click', () => setView('grid'));
   $('#view-list').addEventListener('click', () => setView('list'));
   $('#filter-chips').addEventListener('click', (e) => {
     const c = e.target.closest('.fchip');
     if (!c) return;
-    pFilter = c.dataset.pfilter;
+    state.pFilter = c.dataset.pfilter;
     $$('.fchip').forEach((x) => x.classList.toggle('active', x === c));
-    page = 1; renderList();
+    state.page = 1; renderList();
   });
   bindPresetManager();
 }
@@ -286,9 +262,9 @@ function bindPresetManager() {
     const label = $('#np-label').value.trim();
     const badgeText = $('#np-badge').value.trim() || label;
     if (!label) return;
-    customPresets.push({ id: `c_${Date.now()}`, label, badgeText, badgeColor: $('#np-color').value });
+    state.customPresets.push({ id: `c_${Date.now()}`, label, badgeText, badgeColor: $('#np-color').value });
     $('#np-label').value = ''; $('#np-badge').value = '';
-    save({ customPresets });
+    save({ customPresets: state.customPresets });
     renderCustomPresets(); refreshPresetSelects(); renderList();
   });
   renderCustomPresets();
@@ -297,16 +273,16 @@ function bindPresetManager() {
 function renderCustomPresets() {
   const host = $('#preset-custom-list');
   host.textContent = '';
-  if (!customPresets.length) { host.appendChild(empty('ยังไม่มี preset กำหนดเอง')); return; }
-  for (const c of customPresets) {
+  if (!state.customPresets.length) { host.appendChild(empty('ยังไม่มี preset กำหนดเอง')); return; }
+  for (const c of state.customPresets) {
     const row = el('div', 'cpreset-row');
     const chip = el('span', 'cpreset-chip');
     chip.textContent = c.badgeText; chip.style.background = c.badgeColor;
     const name = el('span'); name.textContent = c.label;
     const del = el('button', 'btn-ghost sm'); del.textContent = '✕';
     del.addEventListener('click', () => {
-      customPresets = customPresets.filter((x) => x.id !== c.id);
-      save({ customPresets });
+      state.customPresets = state.customPresets.filter((x) => x.id !== c.id);
+      save({ customPresets: state.customPresets });
       renderCustomPresets(); refreshPresetSelects(); renderList();
     });
     row.append(chip, name, del);
@@ -323,64 +299,24 @@ function refreshPresetSelects() {
 }
 
 function setView(mode) {
-  viewMode = mode;
+  state.viewMode = mode;
   $('#view-grid').classList.toggle('active', mode === 'grid');
   $('#view-list').classList.toggle('active', mode === 'list');
   renderList();
 }
 
-function visibleProducts() {
-  let list = !search ? products : products.filter((p) =>
-    p.code.toLowerCase().includes(search) || p.name.toLowerCase().includes(search));
-  if (pFilter === 'discount') {
-    list = list.filter((p) => p._promo && p._promo.type !== 'giveaway' && p.priceSale != null);
-  } else if (pFilter === 'giveaway') {
-    list = list.filter((p) => (p._promo && p._promo.type === 'giveaway') || /แถม/.test(p.note || ''));
-  }
-  if (sortBy === 'discount') {
-    list = [...list].sort((a, b) => discountPct(b) - discountPct(a));
-  } else if (sortBy === 'expiry') {
-    list = [...list].sort((a, b) => (expiryTs(a) ?? Infinity) - (expiryTs(b) ?? Infinity));
-  }
-  return list;
-}
-
-// Campaign end (`end_pro`) as a timestamp, or null when the promo has no expiry.
-function expiryTs(p) {
-  const raw = p._promo && p._promo.endsAt;
-  if (!raw) return null;
-  const t = Date.parse(raw);
-  return Number.isFinite(t) ? t : null;
-}
-
-// Hard Rule 5: surface expiring/expired promos before they get rendered.
-function expiryInfo(p) {
-  const t = expiryTs(p);
-  if (t == null) return null;
-  const days = Math.floor((t - Date.now()) / 86400000);
-  if (days < 0) return { expired: true, label: '⏰ โปรหมดอายุ' };
-  if (days <= 3) return { expired: false, label: days === 0 ? '⏰ หมดวันนี้' : `⏰ เหลือ ${days} วัน` };
-  return null;
-}
-
-// The slice of the filtered list shown on the current page.
-function pageProducts() {
-  const list = visibleProducts();
-  const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
-  if (page > pages) page = pages;
-  return list.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-}
+// visibleProducts / expiryTs / expiryInfo / pageProducts moved to ./state.js
 
 function renderList() {
   const host = $('#product-list');
-  host.classList.toggle('grid', viewMode === 'grid');
-  host.classList.toggle('list', viewMode === 'list');
+  host.classList.toggle('grid', state.viewMode === 'grid');
+  host.classList.toggle('list', state.viewMode === 'list');
   host.textContent = '';
 
   const list = visibleProducts();
   $('#result-count').textContent = `พบ ${list.length} รายการ`;
 
-  if (products.length === 0) { host.appendChild(empty('ยังไม่มีข้อมูล — โหลดจากแหล่งด้านบนก่อน')); updateCount(); renderPager(0); return; }
+  if (state.products.length === 0) { host.appendChild(empty('ยังไม่มีข้อมูล — โหลดจากแหล่งด้านบนก่อน')); updateCount(); renderPager(0); return; }
   if (list.length === 0) { host.appendChild(empty('ไม่พบสินค้าตามคำค้น')); updateCount(); renderPager(0); return; }
 
   for (const p of pageProducts()) host.appendChild(productCard(p));
@@ -394,34 +330,34 @@ function renderPager(total) {
   if (!pagerHost) return;
   pagerHost.textContent = '';
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
-  if (total <= PER_PAGE) return; // single page — no controls needed
+  if (total <= PER_PAGE) return; // single state.page — no controls needed
 
   const mk = (label, target, disabled) => {
     const b = el('button', 'btn-ghost sm');
     b.textContent = label;
     b.disabled = disabled;
     b.addEventListener('click', () => {
-      page = target;
+      state.page = target;
       renderList();
       $('#products-card')?.scrollIntoView({ block: 'start' });
     });
     return b;
   };
-  pagerHost.appendChild(mk('‹ ก่อนหน้า', page - 1, page <= 1));
+  pagerHost.appendChild(mk('‹ ก่อนหน้า', state.page - 1, state.page <= 1));
   const info = el('span', 'pager-info');
-  info.textContent = `หน้า ${page} / ${pages}`;
+  info.textContent = `หน้า ${state.page} / ${pages}`;
   pagerHost.appendChild(info);
-  pagerHost.appendChild(mk('ถัดไป ›', page + 1, page >= pages));
+  pagerHost.appendChild(mk('ถัดไป ›', state.page + 1, state.page >= pages));
 }
 
 function productCard(p) {
-  const card = el('div', 'pcard' + (selectedCodes.has(p.code) ? ' selected' : ''));
+  const card = el('div', 'pcard' + (state.selectedCodes.has(p.code) ? ' selected' : ''));
 
   const cb = el('input', 'pcheck');
   cb.type = 'checkbox';
-  cb.checked = selectedCodes.has(p.code);
+  cb.checked = state.selectedCodes.has(p.code);
   cb.addEventListener('change', () => {
-    if (cb.checked) selectedCodes.add(p.code); else selectedCodes.delete(p.code);
+    if (cb.checked) state.selectedCodes.add(p.code); else state.selectedCodes.delete(p.code);
     card.classList.toggle('selected', cb.checked);
     updateCount(); baseChanged();
   });
@@ -445,8 +381,8 @@ function productCard(p) {
 
   const preset = el('select', 'ppreset');
   for (const [v, l] of presetOptions()) { const o = el('option'); o.value = v; o.textContent = l; preset.appendChild(o); }
-  preset.value = presetByCode.get(p.code) || 'custom';
-  preset.addEventListener('change', () => { presetByCode.set(p.code, preset.value); baseChanged(); });
+  preset.value = state.presetByCode.get(p.code) || 'custom';
+  preset.addEventListener('change', () => { state.presetByCode.set(p.code, preset.value); baseChanged(); });
 
   card.append(cb, imgWrap);
   const pct = discountPct(p);
@@ -495,17 +431,7 @@ function priceBlock(p) {
   return d;
 }
 
-// Discount percent for the corner chip — from explicit percent promos when
-// available, else derived from normal vs sale price. Returns 0 when N/A.
-function discountPct(p) {
-  if (p._promo && p._promo.type === 'percent' && p._promo.discount > 0) {
-    return Math.round(p._promo.discount);
-  }
-  if (p.priceSale != null && p.priceNormal > 0 && p.priceSale < p.priceNormal) {
-    return Math.round((1 - p.priceSale / p.priceNormal) * 100);
-  }
-  return 0;
-}
+// discountPct moved to ./state.js
 
 // Replace a product's image with a local file (data URL). Works for the in-app
 // preview and the composite banner; a data: URL is NOT a public URL, so real
@@ -530,22 +456,22 @@ function pickLocalImage(p, imgEl, card) {
 }
 
 function updateCount() {
-  $('#selected-count').textContent = `(${selectedCodes.size} เลือก)`;
-  // pill on the สินค้า tab so the selection is visible from every page
+  $('#selected-count').textContent = `(${state.selectedCodes.size} เลือก)`;
+  // pill on the สินค้า tab so the selection is visible from every state.page
   const pill = $('#tab-selected');
   if (pill) {
-    pill.textContent = String(selectedCodes.size);
-    pill.classList.toggle('hidden', selectedCodes.size === 0);
+    pill.textContent = String(state.selectedCodes.size);
+    pill.classList.toggle('hidden', state.selectedCodes.size === 0);
   }
 }
 
 // ---- payload (auto-built or AI-edited) ------------------------------------
 function selectedProducts() {
-  return products
-    .filter((p) => selectedCodes.has(p.code))
+  return state.products
+    .filter((p) => state.selectedCodes.has(p.code))
     .map((p) => {
-      const pr = presetByCode.get(p.code) || p.promoType;
-      const c = customPresets.find((x) => x.id === pr);
+      const pr = state.presetByCode.get(p.code) || p.promoType;
+      const c = state.customPresets.find((x) => x.id === pr);
       // custom preset -> 'custom' template slot + its own badge text/color
       if (c) return { ...p, promoType: 'custom', badgeText: c.badgeText || c.label, badgeColor: c.badgeColor || '#E8000D' };
       return { ...p, promoType: pr };
@@ -562,12 +488,12 @@ function autoPayload() {
 }
 
 function currentPayload() {
-  return aiOverride || autoPayload();
+  return state.aiOverride || autoPayload();
 }
 
 // product selection/preset changed -> the AI edit no longer applies
 function baseChanged() {
-  aiOverride = null;
+  state.aiOverride = null;
   rebuild();
 }
 
@@ -721,7 +647,7 @@ function renderValidation(carousels) {
 
   host.appendChild(pill(`${totalBubbles} bubble`, allErrors.length ? 'err' : 'ok'));
   if (carousels.length > 1) host.appendChild(pill(`${carousels.length} carousels`, 'warn'));
-  if (aiOverride) host.appendChild(pill('AI edited', 'warn'));
+  if (state.aiOverride) host.appendChild(pill('AI edited', 'warn'));
   host.appendChild(pill(`${fmtBytes(totalBytes)}`, totalBytes > 50 * 1024 ? 'err' : 'ok'));
 
   for (const e of allErrors) host.appendChild(msgEl(e, 'err'));
@@ -742,8 +668,8 @@ function msgEl(text, kind) { const s = el('span', `msg ${kind}`); s.textContent 
 
 // ---- export ---------------------------------------------------------------
 function bindExport() {
-  $('#alt-text').addEventListener('input', () => { if (!aiOverride) rebuild(); });
-  $('#flex-template')?.addEventListener('change', () => { aiOverride = null; rebuild(); });
+  $('#alt-text').addEventListener('input', () => { if (!state.aiOverride) rebuild(); });
+  $('#flex-template')?.addEventListener('change', () => { state.aiOverride = null; rebuild(); });
   $('#copy-json').addEventListener('click', copyJson);
   $('#download-json').addEventListener('click', downloadJson);
   $('#open-sim').addEventListener('click', openSimulator);
@@ -813,7 +739,7 @@ function bindChatWindow() {
       sendChatContext();
     } else if (type === 'apply-flex') {
       try {
-        aiOverride = data.flex;
+        state.aiOverride = data.flex;
         rebuild();
         window.chatBus.send('chat', 'applied', { ok: true });
       } catch {
@@ -843,8 +769,8 @@ function bindChat() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
   });
   $('#chat-reset').addEventListener('click', () => {
-    if (!aiOverride) return chatStatus('ยังไม่มีการแก้ด้วย AI');
-    aiOverride = null;
+    if (!state.aiOverride) return chatStatus('ยังไม่มีการแก้ด้วย AI');
+    state.aiOverride = null;
     rebuild();
     chatStatus('กลับไปดีไซน์อัตโนมัติแล้ว');
   });
@@ -898,14 +824,14 @@ async function sendChat() {
   $('#chat-input').value = '';
 
   const result = backend === 'bridge'
-    ? await editViaBridge(payload, text, chatMode)
-    : await editViaApi(payload, text, chatMode);
+    ? await editViaBridge(payload, text, state.chatMode)
+    : await editViaApi(payload, text, state.chatMode);
   if (!result) return; // status already set by the helper
 
-  if (chatMode === 'advise') {
+  if (state.chatMode === 'advise') {
     renderAdvice(result.advice || [], result.flex || null, text);
   } else {
-    aiOverride = result;
+    state.aiOverride = result;
     rebuild();
     appendChat('ai', '✅ แก้ดีไซน์ให้แล้ว — ดูพรีวิวด้านบน');
     chatStatus('');
@@ -928,7 +854,7 @@ function renderAdvice(advice, flex, instruction) {
     const applyBtn = el('button', 'adv-apply');
     applyBtn.textContent = '✅ ใช้ดราฟต์นี้';
     applyBtn.addEventListener('click', () => {
-      aiOverride = flex; rebuild();
+      state.aiOverride = flex; rebuild();
       applyBtn.disabled = true; applyBtn.textContent = 'ใช้แล้ว';
       chatStatus('ใช้ดราฟต์ที่แนะนำแล้ว — ดูพรีวิวด้านบน');
     });
@@ -1036,7 +962,7 @@ function bindPromoSettings() {
     const f = $('#promo-logo').files && $('#promo-logo').files[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => { promoLogo = String(reader.result); save({ promoLogo }); setStatus('#composite-status', 'ตั้งโลโก้แล้ว'); };
+    reader.onload = () => { state.promoLogo = String(reader.result); save({ promoLogo: state.promoLogo }); setStatus('#composite-status', 'ตั้งโลโก้แล้ว'); };
     reader.readAsDataURL(f);
   });
   $('#promo-contact').addEventListener('change', () => save({ promoContact: $('#promo-contact').value }));
@@ -1118,7 +1044,7 @@ function bindFlexD() {
         contents: { type: 'carousel', contents: bubbles.slice(i, i + 12) },
       });
     }
-    aiOverride = messages.length === 1 ? messages[0] : messages;
+    state.aiOverride = messages.length === 1 ? messages[0] : messages;
     rebuild();
     setStatus('#flexd-status', `จัด Flex จาก ${uploadedBanners.length} รูปแล้ว — ดู/ส่งออกได้ที่แท็บ 🎨 ดีไซน์ Flex`);
     document.querySelector('.maintab[data-mainpane="flex"]')?.click();
@@ -1254,7 +1180,7 @@ function bindRefImage() {
     reader.readAsDataURL(f);
   });
   $('#ref-from-product').addEventListener('click', refFromProduct);
-  $('#ref-clear').addEventListener('click', () => { refImage = null; renderRef(null); });
+  $('#ref-clear').addEventListener('click', () => { state.refImage = null; renderRef(null); });
 }
 
 async function refFromProduct() {
@@ -1266,8 +1192,8 @@ async function refFromProduct() {
   setStatus('#ai-image-status', 'กำลังดึงรูปสินค้ามาเป็นเรฟ…');
   const res = await proxyFetch(src, { binary: true });
   if (!res.ok || !res.base64) return setStatus('#ai-image-status', 'ดึงรูปสินค้าไม่สำเร็จ', true);
-  refImage = { mime: res.contentType || 'image/jpeg', base64: res.base64 };
-  renderRef(`data:${refImage.mime};base64,${refImage.base64}`);
+  state.refImage = { mime: res.contentType || 'image/jpeg', base64: res.base64 };
+  renderRef(`data:${state.refImage.mime};base64,${state.refImage.base64}`);
   setStatus('#ai-image-status', 'ตั้งรูปสินค้าเป็นเรฟแล้ว');
 }
 
@@ -1275,7 +1201,7 @@ async function refFromProduct() {
 function setRefImage(dataUrl) {
   const m = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl || '');
   if (!m) return setStatus('#ai-image-status', 'อ่านรูปเรฟไม่สำเร็จ', true);
-  refImage = { mime: m[1], base64: m[2] };
+  state.refImage = { mime: m[1], base64: m[2] };
   renderRef(dataUrl);
 }
 
@@ -1298,9 +1224,9 @@ function bindGenModes() {
   $('#genmode-tabs').addEventListener('click', (e) => {
     const t = e.target.closest('.tab');
     if (!t) return;
-    genMode = t.dataset.genmode;
+    state.genMode = t.dataset.genmode;
     $$('#genmode-tabs .tab').forEach((x) => x.classList.toggle('active', x === t));
-    $('#genmode-product-only').classList.toggle('hidden', genMode !== 'product');
+    $('#genmode-product-only').classList.toggle('hidden', state.genMode !== 'product');
     renderPromptKit(); composeKitPrompt();
   });
   $('#img-extra').addEventListener('input', composeKitPrompt);
@@ -1310,8 +1236,8 @@ function bindGenModes() {
 function renderPromptKit() {
   const host = $('#promptkit');
   host.textContent = '';
-  const sel = kitSel[genMode];
-  const cats = genMode === 'product'
+  const sel = state.kitSel[state.genMode];
+  const cats = state.genMode === 'product'
     ? ['purpose', 'style', 'theme', 'elements', 'mood']
     : ['theme', 'style', 'elements', 'mood']; // bg mode: theme first, purpose ignored
   for (const cat of cats) {
@@ -1340,12 +1266,12 @@ function renderPromptKit() {
 }
 
 function composeKitPrompt() {
-  const sel = kitSel[genMode];
+  const sel = state.kitSel[state.genMode];
   const p = selectedProducts()[0];
   $('#img-prompt').value = composePrompt({
-    mode: genMode,
+    mode: state.genMode,
     ...sel,
-    productName: genMode === 'product' && p ? p.name : undefined,
+    productName: state.genMode === 'product' && p ? p.name : undefined,
     extra: $('#img-extra').value.trim() || undefined,
   });
 }
@@ -1355,7 +1281,7 @@ function applyImgProviderUi() {
   $('#img-key-row').classList.toggle('hidden', $('#img-provider').value === 'codex');
 }
 
-// Composite promo banners (free, in-app canvas) from the selected products.
+// Composite promo banners (free, in-app canvas) from the selected state.products.
 async function genComposite() {
   const sel = selectedProducts();
   if (!sel.length) return setStatus('#composite-status', 'เลือกสินค้าก่อน', true);
@@ -1370,12 +1296,12 @@ async function genComposite() {
   out.textContent = '';
   setStatus('#composite-status', `กำลังสร้าง ${sel.length} แบนเนอร์…`);
   const promoOpts = {
-    logoUrl: promoLogo || undefined,
+    logoUrl: state.promoLogo || undefined,
     contact: $('#promo-contact').value.trim() || undefined,
     shipFree: $('#promo-shipfree').checked,
   };
   // promo / cny → production-accurate HTML card (skill templates A/B, rendered
-  // to PNG by Chromium); classic / bold stay on the in-page canvas compositor.
+  // to PNG by Chromium); classic / bold stay on the in-state.page canvas compositor.
   const useCard = (template === 'promo' || template === 'cny') && typeof window.cardRender === 'function';
   let done = 0;
   for (const p of sel) {
@@ -1475,7 +1401,7 @@ async function genAiImage() {
   const prompt = $('#img-prompt').value.trim();
   if (!prompt) return setStatus('#ai-image-status', 'ใส่คำอธิบายรูปก่อน', true);
   // bg mode = scene only, no product reference
-  const ref = genMode === 'product' ? refImage : null;
+  const ref = state.genMode === 'product' ? state.refImage : null;
 
   // Codex (free) — via the bridge /genimage (runs `codex exec`, no API key).
   if (provider === 'codex') {
@@ -1772,7 +1698,7 @@ function renderContent(c) {
     act.appendChild(copy);
     if (isAlt) {
       const use = el('button'); use.textContent = 'ใช้เป็น altText';
-      use.addEventListener('click', () => { $('#alt-text').value = txt; if (!aiOverride) rebuild(); use.textContent = 'ใส่แล้ว'; });
+      use.addEventListener('click', () => { $('#alt-text').value = txt; if (!state.aiOverride) rebuild(); use.textContent = 'ใส่แล้ว'; });
       act.appendChild(use);
     }
     b.append(lab, t, act);
@@ -1804,7 +1730,7 @@ async function restore() {
   try {
     const s = await chrome.storage.local.get(['sheetUrl', 'sheetName', 'jsonUrl', 'anthropicKey', 'cachedProducts', 'aiBackend', 'bridgeUrl', 'imgProvider', 'imgKey', 'hostProvider', 'imgbbKey', 'cldCloud', 'cldPreset', 'promoLogo', 'promoContact', 'promoShipfree', 'promoToken', 'customPresets']);
     if (Array.isArray(s.customPresets)) {
-      customPresets = s.customPresets;
+      state.customPresets = s.customPresets;
       renderCustomPresets(); refreshPresetSelects();
     }
     if (s.sheetUrl) $('#sheet-url').value = s.sheetUrl;
@@ -1819,7 +1745,7 @@ async function restore() {
     if (s.imgbbKey) $('#imgbb-key').value = s.imgbbKey;
     if (s.cldCloud) $('#cld-cloud').value = s.cldCloud;
     if (s.cldPreset) $('#cld-preset').value = s.cldPreset;
-    if (s.promoLogo) promoLogo = s.promoLogo;
+    if (s.promoLogo) state.promoLogo = s.promoLogo;
     if (s.promoContact) $('#promo-contact').value = s.promoContact;
     if (s.promoShipfree === false) $('#promo-shipfree').checked = false;
     if (s.promoToken) {
@@ -1833,12 +1759,12 @@ async function restore() {
 
     const c = s.cachedProducts;
     if (c && Array.isArray(c.products) && c.products.length) {
-      products = c.products;
-      presetByCode.clear();
-      selectedCodes.clear();
-      for (const p of products) presetByCode.set(p.code, p.promoType);
+      state.products = c.products;
+      state.presetByCode.clear();
+      state.selectedCodes.clear();
+      for (const p of state.products) state.presetByCode.set(p.code, p.promoType);
       renderList();
-      loadStatus(`จาก cache: ${products.length} รายการ · ${c.label || ''} · ล่าสุด ${new Date(c.fetchedAt).toLocaleString()} — กดปุ่มโหลดเพื่อรีเฟรช`);
+      loadStatus(`จาก cache: ${state.products.length} รายการ · ${c.label || ''} · ล่าสุด ${new Date(c.fetchedAt).toLocaleString()} — กดปุ่มโหลดเพื่อรีเฟรช`);
     }
   } catch { /* storage unavailable */ }
 }
