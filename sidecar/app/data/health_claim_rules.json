@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "description": "Rule list for the Thai health-claim risk checker. Edit freely — the checker reloads this file on startup. severity: high = ผิดกฎหมายโฆษณา (พ.ร.บ.ยา/อาหาร, ประกาศ อย.) ต้องตัดออก, medium = เสี่ยง ควรเขียนใหม่, low = ระวัง/ตรวจบริบท. type: 'terms' = substring match (Thai has no word boundaries), 'regex' = Python regex.",
+  "rules": [
+    {
+      "id": "th_cure_claim",
+      "category": "cure_treatment",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["รักษาโรค", "รักษาให้หาย", "หายขาด", "หายเป็นปลิดทิ้ง", "แก้โรค", "บำบัดโรค", "เยียวยาโรค", "หายจากโรค", "โรคหาย", "หยุดยาได้"],
+      "message": "อ้างสรรพคุณรักษา/ทำให้หายจากโรค — ห้ามตามกฎหมายโฆษณายาและอาหาร (อย.)",
+      "suggestion": "เลี่ยงคำว่า รักษา/หายขาด — ใช้ 'ช่วยดูแลสุขภาพ' หรือพูดถึงราคา/โปรโมชั่น/ความสะดวกแทน"
+    },
+    {
+      "id": "th_cure_word",
+      "category": "cure_treatment",
+      "severity": "medium",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["รักษา", "บำบัด"],
+      "message": "คำว่า 'รักษา/บำบัด' สื่อสรรพคุณทางยา — เสี่ยงผิดกฎโฆษณา (ตรวจบริบท เช่น 'รักษาความสะอาด' ไม่เข้าข่าย)",
+      "suggestion": "ใช้ 'ดูแล' หรือ 'บำรุง' แทน ถ้าไม่ใช่ยาที่ขึ้นทะเบียนข้อบ่งใช้นั้น"
+    },
+    {
+      "id": "th_disease_prevention",
+      "category": "disease_prevention",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ป้องกันโรค", "ป้องกันมะเร็ง", "ต้านมะเร็ง", "ฆ่าเซลล์มะเร็ง", "ยับยั้งมะเร็ง", "ต้านไวรัส", "ฆ่าเชื้อไวรัส", "ยับยั้งเชื้อ", "ป้องกันเบาหวาน", "ป้องกันโควิด", "ป้องกันอัลไซเมอร์", "ป้องกันหลอดเลือด"],
+      "message": "อ้างการป้องกัน/ต้านโรค — อาหารและอาหารเสริมห้ามอ้างสรรพคุณป้องกันหรือบำบัดโรค",
+      "suggestion": "ตัดการอ้างโรคออก — สื่อสารเรื่องการดูแลสุขภาพโดยรวมแทน"
+    },
+    {
+      "id": "th_disease_marker",
+      "category": "disease_claim",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ลดเบาหวาน", "ลดความดัน", "ลดน้ำตาลในเลือด", "ลดไขมันในเลือด", "ลดคอเลสเตอรอล", "ละลายลิ่มเลือด", "ฟื้นฟูตับ", "ล้างตับ", "ล้างไต", "ฟอกเลือด", "สลายนิ่ว"],
+      "message": "อ้างผลต่อโรค/ค่าชี้วัดทางการแพทย์ (เบาหวาน ความดัน ไขมัน ตับ ไต) — ห้ามในโฆษณาอาหาร/อาหารเสริม",
+      "suggestion": "ตัดการอ้างผลทางการแพทย์ — แนะนำให้ปรึกษาแพทย์/เภสัชกรแทน"
+    },
+    {
+      "id": "th_weight_loss",
+      "category": "weight_loss",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ลดน้ำหนัก", "ลดความอ้วน", "ผอมแน่นอน", "ผอมเร็ว", "ผอมไว", "หุ่นดีทันใจ", "เผาผลาญไขมัน", "สลายไขมัน", "บล็อกไขมัน", "ดักจับไขมัน", "ดักจับแป้ง", "ไม่ต้องออกกำลังกาย"],
+      "message": "อ้างสรรพคุณลดน้ำหนัก/ลดความอ้วน — ผลิตภัณฑ์เสริมอาหารห้ามโฆษณาว่าลดน้ำหนักได้",
+      "suggestion": "เลี่ยงการอ้างลดน้ำหนัก — หากจำเป็น ใช้ 'ดูแลรูปร่าง ควบคู่การออกกำลังกายและควบคุมอาหาร'"
+    },
+    {
+      "id": "th_weight_loss_number",
+      "category": "weight_loss",
+      "severity": "high",
+      "lang": "th",
+      "type": "regex",
+      "pattern": "ลด(?:น้ำหนัก)?\\s*\\d+\\s*(?:กก\\.?|กิโล(?:กรัม)?|โล)",
+      "message": "การันตีตัวเลขลดน้ำหนัก (เช่น 'ลด 5 กิโล') — เข้าข่ายโฆษณาเกินจริง ผิดกฎหมาย",
+      "suggestion": "ตัดตัวเลขการลดน้ำหนักออกทั้งหมด"
+    },
+    {
+      "id": "th_result_guarantee",
+      "category": "guarantee",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["เห็นผล 100%", "ได้ผล 100%", "เห็นผลจริง", "เห็นผลทันที", "เห็นผลไว", "การันตีผล", "การันตี", "รับประกันผล", "รับรองผล", "ได้ผลทุกคน", "หายทุกราย", "ใช้แล้วหายทุกคน"],
+      "message": "การันตี/รับประกันผลลัพธ์ — เข้าข่ายโฆษณาเกินจริง (ผลลัพธ์แต่ละบุคคลต่างกัน)",
+      "suggestion": "ตัดการการันตีออก — ถ้าจะเล่าผล ให้ใส่ 'ผลลัพธ์ขึ้นอยู่กับแต่ละบุคคล' และห้ามอ้างผลทางยา"
+    },
+    {
+      "id": "th_result_within_days",
+      "category": "guarantee",
+      "severity": "high",
+      "lang": "th",
+      "type": "regex",
+      "pattern": "เห็นผล(?:ภายใน|ใน)?\\s*\\d+\\s*(?:วัน|สัปดาห์|ชั่วโมง|ชม\\.?|คืน)",
+      "message": "อ้างเห็นผลภายในระยะเวลาที่กำหนด — เข้าข่ายโฆษณาเกินจริง",
+      "suggestion": "ตัดกรอบเวลาเห็นผลออก"
+    },
+    {
+      "id": "th_prohibited_word",
+      "category": "prohibited_word",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ดีที่สุด", "ที่สุดในโลก", "ยอดเยี่ยมที่สุด", "อันดับ 1", "อันดับหนึ่ง", "เจ้าแรก", "เด็ดขาด", "ศักดิ์สิทธิ์", "มหัศจรรย์", "วิเศษ", "หายห่วง", "แห่งเดียวในโลก", "ไม่มีใครเทียบ"],
+      "message": "คำต้องห้ามตามกฎหมายโฆษณายา (เช่น ดีที่สุด เด็ดขาด ศักดิ์สิทธิ์ มหัศจรรย์ หายห่วง) — ห้ามใช้",
+      "suggestion": "ตัดคำอวดอ้างขั้นสูงสุดออก — ขายด้วยราคา/โปร/บริการแทน"
+    },
+    {
+      "id": "th_superlative_soft",
+      "category": "superlative",
+      "severity": "medium",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["สุดยอด", "ขายดีอันดับ", "เหนือกว่าทุกยี่ห้อ", "ดีกว่ายา"],
+      "message": "คำอวดอ้างเปรียบเทียบ/ขั้นสูง — เสี่ยงเข้าข่ายโฆษณาเกินจริง",
+      "suggestion": "ใช้ข้อความเชิงข้อเท็จจริง เช่น ยอดขาย/รีวิวที่ตรวจสอบได้ หรือเลี่ยงการเปรียบเทียบ"
+    },
+    {
+      "id": "th_fda_misuse",
+      "category": "fda_misuse",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["อย. รับรอง", "อย.รับรอง", "รับรองจาก อย", "ผ่านการรับรอง อย", "อย. การันตี", "อย.การันตี", "การันตีโดย อย"],
+      "message": "อ้างว่า อย. 'รับรอง' สรรพคุณ — อย. ออกเลขสารบบ/เลขที่อนุญาตเท่านั้น ไม่ได้รับรองสรรพคุณ",
+      "suggestion": "ใช้ 'มีเลขที่ อย. xx-x-xxxxx-x-xxxx' หรือ 'ได้รับอนุญาตโฆษณาเลขที่ ...' ตามจริง"
+    },
+    {
+      "id": "th_safety_claim",
+      "category": "safety_claim",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ปลอดภัย 100%", "ปลอดภัย100%", "ไม่มีผลข้างเคียง", "ไร้ผลข้างเคียง", "ปลอดภัยแน่นอน", "ไม่มีอันตรายใด"],
+      "message": "อ้างความปลอดภัยสมบูรณ์/ไม่มีผลข้างเคียง — เข้าข่ายโฆษณาเกินจริง",
+      "suggestion": "ตัดออก — ใช้ 'ควรปรึกษาแพทย์หรือเภสัชกรก่อนใช้' แทน"
+    },
+    {
+      "id": "th_sexual",
+      "category": "sexual_enhancement",
+      "severity": "high",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["เพิ่มสมรรถภาพทางเพศ", "ปลุกอารมณ์ทางเพศ", "อึดทนนาน", "ชะลอหลั่ง", "เพิ่มขนาดน้องชาย"],
+      "message": "อ้างสรรพคุณทางเพศ — ห้ามตามประกาศ อย. สำหรับอาหารและผลิตภัณฑ์สุขภาพ",
+      "suggestion": "ตัดออกทั้งหมด — ไม่มีรูปแบบที่โฆษณาได้สำหรับผลิตภัณฑ์ทั่วไป"
+    },
+    {
+      "id": "th_detox",
+      "category": "detox",
+      "severity": "medium",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ดีท็อกซ์", "ดีท็อกส์", "ขับสารพิษ", "ล้างสารพิษ", "ล้างลำไส้"],
+      "message": "อ้างการขับ/ล้างสารพิษ — ไม่มีหลักฐานรองรับ เสี่ยงโฆษณาเกินจริง",
+      "suggestion": "เลี่ยงคำว่า ดีท็อกซ์/ขับสารพิษ — ใช้ 'ช่วยเรื่องระบบขับถ่าย' เฉพาะเมื่อมีข้อมูลรองรับ"
+    },
+    {
+      "id": "th_beauty_timed",
+      "category": "beauty_exaggeration",
+      "severity": "high",
+      "lang": "th",
+      "type": "regex",
+      "pattern": "(?:ขาว|ใส|หน้าใส|ผิวขาว)(?:ขึ้น)?(?:ภายใน|ใน)\\s*\\d+\\s*(?:วัน|สัปดาห์|คืน)",
+      "message": "อ้างผิวขาว/ใสภายในเวลาที่กำหนด — โฆษณาเครื่องสำอางเกินจริง",
+      "suggestion": "ตัดกรอบเวลาออก — ใช้ 'ช่วยให้ผิวดูกระจ่างใสขึ้น เมื่อใช้ต่อเนื่อง'"
+    },
+    {
+      "id": "th_beauty_soft",
+      "category": "beauty_exaggeration",
+      "severity": "medium",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["ขาวใส", "ขาวออร่า", "ย้อนวัย", "ไร้ริ้วรอย", "หน้าเด็ก", "ลดริ้วรอยถาวร"],
+      "message": "คำอวดอ้างความงามแรง — เสี่ยงเกินขอบเขตเครื่องสำอาง (เครื่องสำอางเปลี่ยนโครงสร้างผิวไม่ได้)",
+      "suggestion": "ใช้คำในขอบเขตเครื่องสำอาง เช่น 'ผิวดูกระจ่างใส' 'ดูอ่อนเยาว์ลง'"
+    },
+    {
+      "id": "th_immune",
+      "category": "function_claim",
+      "severity": "medium",
+      "lang": "th",
+      "type": "terms",
+      "terms": ["เสริมภูมิคุ้มกัน", "เพิ่มภูมิคุ้มกัน", "เสริมสร้างภูมิต้านทาน", "บำรุงสมอง", "เพิ่มความจำ", "บำรุงสายตาให้มองชัด"],
+      "message": "อ้างผลต่อการทำงานของร่างกาย (ภูมิคุ้มกัน สมอง ความจำ) — ใช้ได้เฉพาะข้อความที่ อย. อนุญาตเท่านั้น",
+      "suggestion": "ใช้เฉพาะ health claim ที่ได้รับอนุญาตในฉลาก/ใบอนุญาตโฆษณา (ฆอ.) ของผลิตภัณฑ์นั้น"
+    },
+    {
+      "id": "en_cure",
+      "category": "cure_treatment",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bcures?\\b|\\bcured\\b|\\bcuring\\b",
+      "message": "Claims to cure — prohibited for health products under Thai FDA ad rules",
+      "suggestion": "Remove 'cure' — talk about general wellness support, price, or promotion instead"
+    },
+    {
+      "id": "en_treat",
+      "category": "cure_treatment",
+      "severity": "medium",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\btreats?\\b|\\btreating\\b|\\bheals?\\b|\\bhealing\\b",
+      "message": "'treats/heals' implies medical efficacy — risky unless it is a registered drug with that approved indication (check context: 'treat yourself' is fine)",
+      "suggestion": "Use 'supports' or 'helps care for' instead of 'treats/heals'"
+    },
+    {
+      "id": "en_prevent_disease",
+      "category": "disease_prevention",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bprevents?\\s+(?:disease|cancer|diabetes|infection|covid|illness|flu)\\b",
+      "message": "Disease-prevention claim — prohibited for foods/supplements",
+      "suggestion": "Remove the disease reference entirely"
+    },
+    {
+      "id": "en_fda_misuse",
+      "category": "fda_misuse",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bFDA[\\s-]?approved\\b|\\bapproved\\s+by\\s+(?:the\\s+)?FDA\\b",
+      "message": "'FDA approved' misuse — Thai FDA (อย.) issues registration numbers, it does not 'approve' product efficacy claims",
+      "suggestion": "State the actual registration: 'FDA reg. no. xx-x-xxxxx-x-xxxx'"
+    },
+    {
+      "id": "en_guarantee",
+      "category": "guarantee",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bguaranteed?\\s+(?:results?|weight\\s*loss|effects?)\\b|\\b100%\\s*(?:effective|results?|works)\\b|\\bworks\\s+for\\s+everyone\\b",
+      "message": "Guaranteed-results claim — exaggerated advertising (results vary by individual)",
+      "suggestion": "Remove the guarantee; add 'individual results may vary' if describing outcomes"
+    },
+    {
+      "id": "en_safety",
+      "category": "safety_claim",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bno\\s+side\\s+effects?\\b|\\b100%\\s*safe\\b|\\bcompletely\\s+safe\\b",
+      "message": "Absolute-safety claim — exaggerated advertising",
+      "suggestion": "Remove; advise consulting a pharmacist or doctor instead"
+    },
+    {
+      "id": "en_miracle",
+      "category": "prohibited_word",
+      "severity": "high",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bmiracle\\b|\\bmiraculous\\b|\\bmagic(?:al)?\\s+(?:pill|cure|formula)\\b",
+      "message": "'Miracle/magic' claims — prohibited exaggeration",
+      "suggestion": "Remove superlative/miracle language"
+    },
+    {
+      "id": "en_superlative",
+      "category": "superlative",
+      "severity": "medium",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bthe\\s+best\\b|\\bworld'?s\\s+best\\b|\\b#\\s?1\\b|\\bnumber\\s+one\\b",
+      "message": "Superlative claim — risky under Thai ad rules unless substantiated",
+      "suggestion": "Use verifiable facts (review counts, awards with source) or drop the superlative"
+    },
+    {
+      "id": "en_clinically_proven",
+      "category": "evidence_claim",
+      "severity": "medium",
+      "lang": "en",
+      "type": "regex",
+      "pattern": "\\bclinically\\s+proven\\b|\\bdoctor\\s+recommended\\b|\\bscientifically\\s+proven\\b",
+      "message": "Evidence claim ('clinically proven', 'doctor recommended') — requires substantiation and อย. ad approval",
+      "suggestion": "Only use if you hold the study and the approved ad permit (ฆอ.); otherwise remove"
+    }
+  ]
+}
